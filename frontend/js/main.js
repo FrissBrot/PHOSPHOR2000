@@ -14,6 +14,22 @@ document.fonts.load('40px "VT323"', "ÄÖÜäöü").catch(() => {});
 
 const params = new URLSearchParams(location.search);
 const canvas = document.getElementById("screen");
+
+// Composite PAL (720x576, ratio 1.25) is shown 4:3 by the CRT itself -> stretch to the full output.
+// Any other output (e.g. an HDMI monitor on the master, 16:9) -> keep 4:3 with black bars.
+function fitCanvas() {
+  const r = window.innerWidth / Math.max(1, window.innerHeight);
+  const composite = Math.abs(r - 1.25) < 0.03 || Math.abs(r - 720 / 480) < 0.03;
+  if (composite || Math.abs(r - 4 / 3) < 0.03) {
+    canvas.style.width = "100vw"; canvas.style.height = "100vh"; canvas.style.marginTop = "0";
+  } else {
+    const h = Math.min(window.innerHeight, window.innerWidth * 0.75);
+    canvas.style.height = `${h}px`; canvas.style.width = `${h * 4 / 3}px`;
+    canvas.style.margin = `${(window.innerHeight - h) / 2}px auto 0`;
+  }
+}
+window.addEventListener("resize", fitCanvas);
+fitCanvas();
 const clock = new BrowserClock();
 const renderer = new Renderer(canvas, clock);
 window.__phos = renderer;

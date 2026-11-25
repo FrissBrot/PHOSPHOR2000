@@ -92,3 +92,16 @@ def test_version_is_reported(core):
     assert st["version"] and st["version"] != ""
     b = core.node._beacon(time.monotonic(), 0.0)
     assert b["ver"] == st["version"]
+
+
+def test_headless_pi_never_starts_a_kiosk(core, monkeypatch, tmp_path):
+    calls = []
+    monkeypatch.setattr(core_mod, "run_action", lambda what: calls.append(what) or True)
+    monkeypatch.setattr(Core, "KIOSK_WANTS", tmp_path / "not-enabled")     # unit file present but not enabled
+    core.kiosk_override = None
+    assert core.kiosk is False
+    for i in range(0, 2000, 10):
+        core.renderer_watchdog(core.started + i)
+    assert calls == []
+    (tmp_path / "not-enabled").touch()                                       # configure-kiosk.sh enabled it
+    assert core.kiosk is True

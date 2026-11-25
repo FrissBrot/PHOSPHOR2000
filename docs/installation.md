@@ -65,6 +65,19 @@ Options: `--no-network` (external network mode), `--no-crt`, `--no-kiosk`, `--fi
 `--disable-other-wifi` (recommended if the Pi has a home Wi-Fi profile with autoconnect),
 `--norm NTSC`, `--priority N`.
 
+**The master (audio Pi) with or without a screen** — all three work:
+
+| master has | install with | notes |
+|---|---|---|
+| a CRT (composite) | defaults | like every other Pi |
+| no screen | `--no-kiosk --no-crt` | saves ~1 core of CPU on the busiest Pi; dashboard, audio, sync, keyboard calibration all work (the HUD with tap results is shown on the CRT being calibrated) |
+| an HDMI monitor | `--no-crt` | HDMI stays active; the 4:3 picture is letterboxed automatically |
+
+Change later without reinstalling: `sudo /opt/phosphor2000/scripts/configure-kiosk.sh --remove`
+(screen off) or `sudo /opt/phosphor2000/scripts/configure-kiosk.sh` (screen on);
+`configure-crt.sh --rollback` gives HDMI back, `configure-crt.sh` switches to composite. Reboot after
+changing the video output.
+
 Then: `sudo reboot`. HDMI goes dark (composite takes over on Pi 3). After ~30–60 s the CRT shows
 the boot scene.
 

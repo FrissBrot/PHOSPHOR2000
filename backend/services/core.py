@@ -191,8 +191,8 @@ class Core:
         self.node.now_fn = time.monotonic
         self.node.version = software_version()
         self.started = time.monotonic()
-        self.kiosk = Path("/etc/systemd/system/phosphor-renderer.service").exists() and \
-            os.environ.get("PHOSPHOR_NO_KIOSK") != "1"
+        self.kiosk_flag = os.environ.get("PHOSPHOR_NO_KIOSK") != "1"
+        self.kiosk_override: bool | None = None
         self.renderer_seen_at = self.started        # last moment the renderer looked healthy
         self.renderer_restarts = 0
         self.next_renderer_restart = 0.0
@@ -330,6 +330,20 @@ class Core:
     RENDERER_SILENT_S = 45.0       # no report from the browser for this long -> hung/crashed page
     RENDERER_FIRST_S = 240.0       # grace after core start (Chromium cold start on a Pi 3)
     RENDERER_FROZEN_S = 30.0       # page alive but drawing < 1 fps
+
+    KIOSK_WANTS = Path("/etc/systemd/system/phosphor.target.wants/phosphor-renderer.service")
+
+    @property
+    def kiosk(self) -> bool:
+        """A screen is attached *and enabled* on this Pi (configure-kiosk.sh). The unit file exists on
+        every Pi, so its presence is not enough: a headless master must never get a kiosk started."""
+        if self.kiosk_override is not None:
+            return self.kiosk_override
+        return self.kiosk_flag and self.KIOSK_WANTS.exists()
+
+    @kiosk.setter
+    def kiosk(self, value: bool) -> None:
+        self.kiosk_override = value
 
     def renderer_watchdog(self, now: float) -> None:
         """Restart a hung kiosk. systemd only restarts *crashed* processes; a frozen page,
