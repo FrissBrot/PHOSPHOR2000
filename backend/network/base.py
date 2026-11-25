@@ -80,31 +80,40 @@ class NetworkAdapter(ABC):
         pass
 
 
-class NullAdapter(NetworkAdapter):
-    """Used when network.manage is false: never touches the radio.
+class ExternalNetworkAdapter(NetworkAdapter):
+    """Used when ``network.manage`` is false or the safe-mode flag exists.
 
-    The node then behaves as a standalone renderer that still follows a leader
-    if the OS (configured by hand) happens to put it on the cluster network.
+    The radio is never touched. The node assumes it is already on a shared L2
+    network configured by someone else (venue router, Ethernet, hand-made
+    nmcli profile). "Hotspot" and "connect" succeed virtually, so the same
+    election runs over the existing network: competing leaders hear each
+    other's beacons directly and the losing one yields immediately.
     """
 
     def __init__(self) -> None:
         self._events: list[NetEvent] = []
+        self._mode = RadioMode.IDLE
 
     def request_scan(self) -> None:
         self._events.append(NetEvent(EventKind.SCAN_RESULT, []))
 
     def start_hotspot(self) -> None:
-        self._events.append(NetEvent(EventKind.HOTSPOT_FAILED, ok=False, error="network management disabled"))
+        self._mode = RadioMode.AP
+        self._events.append(NetEvent(EventKind.HOTSPOT_UP, {"bssid": None}))
 
     def connect(self, bssid: str | None = None) -> None:
-        self._events.append(NetEvent(EventKind.CONNECT_FAILED, ok=False, error="network management disabled"))
+        self._mode = RadioMode.STATION
+        self._events.append(NetEvent(EventKind.CONNECTED, {"bssid": None}))
 
     def stop(self) -> None:
-        pass
+        self._mode = RadioMode.IDLE
 
     def status(self) -> RadioStatus:
-        return RadioStatus(RadioMode.UNAVAILABLE)
+        return RadioStatus(self._mode, None, None, None, {"external": True})
 
     def poll_events(self) -> list[NetEvent]:
         ev, self._events = self._events, []
         return ev
+
+
+NullAdapter = ExternalNetworkAdapter

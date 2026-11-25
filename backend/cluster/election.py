@@ -235,6 +235,11 @@ class Election:
             self.epoch_seen = max(self.epoch_seen, claim.epoch)
         if claim is None:
             return
+        if self.state in (NodeState.DISCOVERING, NodeState.ELECTION_BACKOFF):
+            # Only possible on an externally managed shared network: follow directly.
+            self.leader, self.leader_bssid, self.leader_seen = claim, b.get("bssid"), now
+            self._reconnect(now, b.get("bssid"), f"leader {claim.node_id} heard on shared network")
+            return
         if self.is_leader():
             # Another leader on *our* L2 segment (should not happen with one SSID, but
             # can with bridged APs / misconfiguration): resolve immediately.

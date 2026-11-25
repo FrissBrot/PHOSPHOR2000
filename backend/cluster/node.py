@@ -616,8 +616,8 @@ class ClusterNode:
         if mode == "single" and not target:
             raise CommandError("target required")
         bpm = float(a.get("bpm", self.shared.calibration.bpm))
-        if not 40 <= bpm <= 200:
-            raise CommandError("bpm out of range")
+        if not 40 <= bpm <= 180:
+            raise CommandError("calibration bpm must be 40..180 (flash rate <= 3 Hz)")
         now_c = self.cluster_now(local)
         cur = self.shared.calibration.offsets_ms.get(target, 0.0) if target else 0.0
         self.cal = CalSession(active=True, mode=mode, target=target, bpm=bpm,

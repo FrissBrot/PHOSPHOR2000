@@ -183,7 +183,7 @@ class SafetyConfig(Strict):
 
 
 class CalibrationConfig(Strict):
-    bpm: float = Field(120.0, ge=40, le=200)
+    bpm: float = Field(120.0, ge=40, le=180)  # flash rate <= 3 Hz
     min_taps: int = Field(16, ge=4, le=64)
     max_taps: int = Field(32, ge=4, le=128)
     outlier_ms: float = Field(150.0, gt=0)

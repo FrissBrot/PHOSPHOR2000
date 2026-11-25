@@ -1,0 +1,5 @@
+/* Full-screen 4:3 canvas for a PAL composite CRT. The composite output has
+   non-square pixels (720x576 shown as 4:3), so the canvas is simply stretched
+   to the whole output; the virtual layout is always 640x480. */
+html, body { margin: 0; padding: 0; background: #000; overflow: hidden; height: 100%; cursor: none; }
+#screen { display: block; width: 100vw; height: 100vh; background: #000; image-rendering: auto; }
