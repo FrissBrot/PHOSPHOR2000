@@ -17,7 +17,7 @@ PW = "correct horse battery"
 @pytest.fixture()
 def core(tmp_path):
     cfg = load_config(node_path=tmp_path / "n.yaml", secrets_path=tmp_path / "s.yaml",
-                      overrides={"node": {"id": "pi-01"}, "network": {"discovery_window": 0.2, "backoff_jitter": 0},
+                      overrides={"node": {"id": "pi-01"}, "network": {"discovery_window": 0.2, "backoff_jitter": 0, "backoff_slot": 0.2},
                                  "secrets": {"admin_password_hash": hash_password(PW), "session_secret": "x" * 32}})
     c = Core(cfg, adapter=ExternalNetworkAdapter(), state_dir=tmp_path, has_audio=False)
     deadline = time.time() + 5
@@ -187,3 +187,26 @@ def test_keyboard_calibration_mode(core):
     assert n.shared.calibration.offsets_ms["pi-03"] == 6
     core.on_key(1, 1, now, now)   # ESC
     assert not n.cal.active
+
+
+def test_wifi_country_from_admin_is_validated_and_applied(client, core):
+    applied = []
+    core.node.on_wifi_country = lambda cc: applied.append(cc) or True
+    login(client)
+    h = {"X-PHOS": "1"}
+    assert client.post("/api/cmd/set_shared", json={"patch": {"site": {"wifi_country": "ch"}}}, headers=h).status_code == 409
+    assert client.post("/api/cmd/set_shared", json={"patch": {"site": {"wifi_country": "CH; reboot"}}}, headers=h).status_code == 409
+    assert client.post("/api/cmd/set_shared", json={"patch": {"site": {"wifi_country": "CH"}}}, headers=h).status_code == 200
+    core.node.tick(time.monotonic())
+    assert applied == ["CH"] and core.node.status(time.monotonic())["wifi_country"] == "CH"
+    core.node.tick(time.monotonic())
+    assert applied == ["CH"]  # idempotent
+
+
+def test_set_wifi_country_rejects_bad_codes():
+    from backend.services.system import set_wifi_country
+    with pytest.raises(ValueError):
+        set_wifi_country("ch")
+    with pytest.raises(ValueError):
+        set_wifi_country("C;H")
+    assert set_wifi_country("CH", dry_run=True)

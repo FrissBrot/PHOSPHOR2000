@@ -43,7 +43,7 @@ def server(tmp_path_factory):
     tmp = tmp_path_factory.mktemp("core")
     port = free_port()
     cfg = load_config(node_path=tmp / "n.yaml", secrets_path=tmp / "s.yaml",
-                      overrides={"node": {"id": "pi-01"}, "network": {"discovery_window": 0.5, "backoff_jitter": 0},
+                      overrides={"node": {"id": "pi-01"}, "network": {"discovery_window": 0.5, "backoff_jitter": 0, "backoff_slot": 0.2},
                                  "server": {"port": port},
                                  "secrets": {"admin_password_hash": hash_password(ADMIN_PW)}})
     core = Core(cfg, adapter=ExternalNetworkAdapter(), state_dir=tmp, has_audio=False)

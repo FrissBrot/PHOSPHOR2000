@@ -19,7 +19,7 @@ import time
 from dataclasses import dataclass, field, replace
 from typing import Any, Callable
 
-from backend.cluster.election import Election, NodeState, Transition
+from backend.cluster.election import AUDIO_BONUS, Election, NodeState, Transition
 from backend.cluster.scheduler import Override, ScheduleState, default_schedule, plan, quantum_beats
 from backend.config import AppConfig, PLAYABLE_SCENES, ScenesConfig, SharedConfig
 from backend.network.base import NetworkAdapter
@@ -82,7 +82,8 @@ class ClusterNode:
         self.rng = rng or random.Random()
         self.wall_clock = wall_clock
         self.has_audio = has_audio
-        self.election = Election(self.id, cfg.node.priority, cfg.network, adapter, self._send_election,
+        self.election = Election(self.id, cfg.node.priority + (AUDIO_BONUS if has_audio else 0), cfg.network,
+                                 adapter, self._send_election,
                                  rng=self.rng, priority_table=cfg.node.priority_table,
                                  on_transition=self._on_transition)
         self._ext_transition = on_transition
@@ -138,6 +139,14 @@ class ClusterNode:
     def _send_election(self, msg: dict, to: str | None) -> None:
         self.send(msg, to)
 
+    def set_has_audio(self, has_audio: bool, local: float) -> None:
+        """An audio input device appeared/disappeared: audio nodes always lead."""
+        if has_audio != self.has_audio:
+            self._log("warning", f"audio input {'present' if has_audio else 'gone'}: "
+                                 f"{'claiming' if has_audio else 'releasing'} audio leader priority")
+        self.has_audio = has_audio
+        self.election.set_priority(self.cfg.node.priority + (AUDIO_BONUS if has_audio else 0), local)
+
     @property
     def state(self) -> NodeState:
         return self.election.state
@@ -159,6 +168,8 @@ class ClusterNode:
     def tick(self, local: float) -> None:
         if self.started_local is None:
             self.started_local = local
+        if self.shared.site.wifi_country != self.applied_country:
+            self._apply_site()
         el = self.election
         was_leader = el.is_leader()
         prev_leader = el.current_leader_id()
@@ -386,6 +397,17 @@ class ClusterNode:
         self.election.on_message(m, local)
 
     on_restart_request: Callable[[str], None] | None = None
+    on_wifi_country: Callable[[str], bool] | None = None
+    applied_country: str | None = None
+
+    def _apply_site(self) -> None:
+        """Apply replicated site settings locally (idempotent)."""
+        cc = self.shared.site.wifi_country
+        if cc and cc != self.applied_country and self.on_wifi_country:
+            ok = self.on_wifi_country(cc)
+            self._log("info" if ok else "error", f"Wi-Fi country {cc} {'applied' if ok else 'could not be applied'}")
+            if ok:
+                self.applied_country = cc
 
     # ================================================================== audio
     def ingest_local_audio(self, est: dict, local: float) -> None:
@@ -583,7 +605,16 @@ class ClusterNode:
         return {"shared_rev": self.shared_rev}
 
     def _cmd_handover(self, a: dict, local: float) -> dict:
-        ok = self.election.request_handover(str(a["target"]), local)
+        target = str(a["target"])
+        audio_online = [pid for pid, p in self.election.peers.items()
+                        if p.priority >= AUDIO_BONUS and local - p.last_seen < 10]
+        if self.has_audio:
+            audio_online.insert(0, self.id)
+        tp = self.election.peers.get(target)
+        if audio_online and (tp is None or tp.priority < AUDIO_BONUS):
+            raise CommandError(f"audio node {audio_online[0]} is online and always leads; "
+                               "a handover to a node without audio would be reverted")
+        ok = self.election.request_handover(target, local)
         if not ok:
             raise CommandError("handover target not reachable or not eligible")
         return {"handover_to": a["target"]}
@@ -733,7 +764,8 @@ class ClusterNode:
         seg = self.current_segment(now_c)
         la = self.local_audio or {}
         return {
-            "id": self.id, "priority": self.cfg.node.priority, "state": self.state.value,
+            "id": self.id, "priority": self.cfg.node.priority, "effective_priority": self.election.priority,
+            "state": self.state.value,
             "leader": self.election.current_leader_id(), "epoch": self.timeline.epoch,
             "uptime": local - (self.started_local or local),
             "sync": {"offset_ms": None if self.is_leader() else round((st.offset - 0) * 1000, 3),
@@ -746,6 +778,7 @@ class ClusterNode:
                          "revision": self.timeline.revision, "reconcile": self.reconcile_info},
             "scene": seg.scene if seg else None,
             "visual_offset_ms": self.visual_offset_ms(),
+            "wifi_country": self.applied_country,
             "audio": {"has_device": self.has_audio, "live": bool(la.get("live")), "bpm": la.get("bpm"),
                       "confidence": la.get("confidence"), "rms": la.get("rms"), "state": la.get("state"),
                       "age": _r(local - la["_rx"]) if la else None},

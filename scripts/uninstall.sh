@@ -15,7 +15,7 @@ systemctl disable --now phosphor.target phosphor-core.service phosphor-audio.ser
 if [ -n "$(original_backup crt || true)" ]; then "$HERE/configure-crt.sh" --rollback; else "$HERE/configure-crt.sh" --remove || true; fi
 if [ -n "$(original_backup network || true)" ]; then "$HERE/configure-network.sh" --rollback; fi
 nft delete table inet phosphor 2>/dev/null || true
-rm -f /etc/systemd/system/phosphor*.service /etc/systemd/system/phosphor.target \
+rm -f /etc/systemd/system/phosphor*.service /etc/systemd/system/phosphor-country@.service /etc/systemd/system/phosphor.target \
       /etc/polkit-1/rules.d/50-phosphor.rules /usr/local/sbin/phosphor-passwd
 systemctl daemon-reload
 if [ "$PURGE" = 1 ]; then

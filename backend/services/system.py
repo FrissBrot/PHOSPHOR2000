@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -20,6 +21,27 @@ ACTIONS: dict[str, list[str]] = {
     "core": ["/usr/bin/systemctl", "--no-ask-password", "restart", "phosphor-core.service"],
     "reboot": ["/usr/bin/systemctl", "--no-ask-password", "reboot"],
 }
+
+
+COUNTRY_RE = re.compile(r"^[A-Z]{2}$")
+
+
+def set_wifi_country(cc: str, dry_run: bool | None = None) -> bool:
+    """Start phosphor-country@CC.service (root oneshot, allowed by polkit for this exact pattern)."""
+    if not COUNTRY_RE.match(cc):
+        raise ValueError("country must be two upper-case letters")
+    argv = ["/usr/bin/systemctl", "--no-ask-password", "start", f"phosphor-country@{cc}.service"]
+    if dry_run is None:
+        dry_run = os.environ.get("PHOSPHOR_DRY_RUN") == "1" or not Path("/etc/systemd/system/phosphor-country@.service").exists()
+    if dry_run:
+        log.warning("dry-run: would execute %s", argv)
+        return True
+    try:
+        return subprocess.run(argv, stdin=subprocess.DEVNULL, capture_output=True, timeout=30,
+                              env={"PATH": "/usr/bin:/bin"}).returncode == 0
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        log.error("set country failed: %s", exc)
+        return False
 
 
 def run_action(what: str, dry_run: bool | None = None) -> bool:

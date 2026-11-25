@@ -24,7 +24,7 @@ their persistent id (`pi-01` … `pi-05`), never by IP.
 |---|---|---|
 | `BOOTING` | process start, cache restored | DISCOVERING |
 | `DISCOVERING` | scanning for `PHOSPHOR2000` (10 s after boot, 4 s after a failure) | RECONNECTING (found) / ELECTION_BACKOFF |
-| `ELECTION_BACKOFF` | no AP found; wait `rank × 8 s + jitter`, keep scanning | RECONNECTING (someone else won) / STARTING_HOTSPOT |
+| `ELECTION_BACKOFF` | no AP found; wait `rank × 12 s + jitter` (+1 slot on a fresh cluster boot for nodes without audio), keep scanning; then one **pre-flight scan** must find nothing (skipped for rank 0) | RECONNECTING (someone else won) / STARTING_HOTSPOT |
 | `STARTING_HOTSPOT` | `nmcli connection up phosphor-ap` | LEADER / DISCOVERING (failed) / DEGRADED (3 failures) |
 | `LEADER` | owns the AP, authority for replicated state | RECONNECTING (yield/handover) / STARTING_HOTSPOT (link lost) |
 | `RECONNECTING` | associating as station (optionally pinned to a BSSID) | RECOVERING (leader beacon heard) / DISCOVERING |
@@ -37,8 +37,25 @@ Every transition is logged with a reason (journal, SQLite event log, admin dashb
 
 **Rank** = number of nodes with higher priority that are believed alive (roster from beacons in
 the last 90 s, excluding the failed leader; the configured priority table on a fresh boot). With
-default priorities pi-02 takes over from pi-01 after ~8 s of failure detection + scan; pi-03
-would wait one more 8 s slot and normally finds pi-02's AP first.
+default priorities pi-02 takes over from pi-01 right after failure detection + scan; pi-03 waits
+one 12 s slot and finds pi-02's AP first. The slot must be longer than a hotspot start plus one
+scan (`network.backoff_slot`); if real Pis need more than ~10 s to bring the AP up, raise it.
+
+## The audio Pi is always the master
+
+A Pi with a USB audio input device gets `priority + 1000` (detected at start, updated live when
+the audio service reports the device plugged/unplugged). Consequences:
+
+* cold boot: the audio Pi has rank 0 and every other Pi waits one extra slot, so the audio Pi
+  starts the hotspot (sim: 39–44 s until all are connected)
+* if the audio Pi fails, the next Pi by normal priority takes over (sim: 24–27 s); its timeline
+  becomes PREDICTED (no live tempo without audio)
+* when an audio Pi (re)appears as a follower, the leader hands over to it once it has been stable
+  for 20 s and the leader has led for ≥ 20 s (sim: 51–90 s after power-on). **This handover drops
+  the network once for ~10–25 s**; the CRTs keep playing
+* a split brain always resolves in favour of the side whose leader has audio
+* the dashboard refuses a manual handover to a Pi without audio while an audio Pi is online
+  (it would be reverted). With two audio Pis the established one stays leader.
 
 ## Leader claims and reconciliation
 
@@ -46,7 +63,7 @@ A leader's claim is `(epoch, priority, node_id)`. Epoch = highest epoch ever see
 in the cache, so a node never reuses an epoch; equal numbers chosen in separate partitions are
 disambiguated by priority and id, giving a **total order**:
 
-> lower epoch wins → higher priority wins → lower node id wins
+> audio wins → lower epoch wins → higher priority wins → lower node id wins
 
 "Lower epoch wins" implements *do not preempt a healthy leader*: the longer-established leader
 always survives a merge; a returning former leader (e.g. pi-01 after a reboot) first scans, finds

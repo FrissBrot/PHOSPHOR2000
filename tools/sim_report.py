@@ -63,12 +63,20 @@ def main():
         for s in range(5):
             w = SimWorld(4, seed=200 + s)
             w.start_music(bpm, ["pi-03"])
-            run_until(w, lambda: settled(w, "pi-01"), 200)
+            run_until(w, lambda: settled(w, "pi-03"), 300)  # audio Pi becomes master
             w.run_for(45)
             sp.append(w.beat_spread_ms())
             err.append(max(abs(w.music_phase_error_ms(nd)) for nd in w.handles))
         print(f"| LIVE {bpm} BPM: future-beat spread across CRTs (ms) | 4 | 5 | {stats(sp)} |")
         print(f"| LIVE {bpm} BPM: worst CRT beat vs. true music beat (ms) | 4 | 5 | {stats(err)} |")
+    at = []
+    for s in seeds:
+        w = SimWorld(5, seed=400 + s)
+        run_until(w, lambda: settled(w, "pi-01"), 200)
+        w.run_for(30)
+        w.start_music(128, ["pi-04"])  # audio interface appears on a follower
+        at.append(run_until(w, lambda: settled(w, "pi-04"), 300))
+    print(f"| audio Pi appears as follower -> it is master, all following (s) | 5 | {len(seeds)} | {stats(at)} |")
     od = []
     for s in range(10):
         w = SimWorld(3, seed=300 + s)

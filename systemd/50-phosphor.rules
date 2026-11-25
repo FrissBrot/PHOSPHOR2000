@@ -1,5 +1,6 @@
 // polkit: the unprivileged "phosphor" user may switch Wi-Fi modes via
-// NetworkManager, restart its own units and reboot. Nothing else.
+// NetworkManager, restart its own units, set the Wi-Fi country through
+// phosphor-country@XX.service, and reboot. Nothing else.
 polkit.addRule(function(action, subject) {
   if (subject.user != "phosphor") return polkit.Result.NOT_HANDLED;
   if (action.id.indexOf("org.freedesktop.NetworkManager.") == 0) return polkit.Result.YES;
@@ -7,6 +8,7 @@ polkit.addRule(function(action, subject) {
     var unit = action.lookup("unit"), verb = action.lookup("verb");
     var ok = ["phosphor-renderer.service", "phosphor-audio.service", "phosphor-core.service"];
     if (ok.indexOf(unit) >= 0 && verb == "restart") return polkit.Result.YES;
+    if (verb == "start" && /^phosphor-country@[A-Z][A-Z]\.service$/.test(unit)) return polkit.Result.YES;
   }
   if (action.id == "org.freedesktop.login1.reboot" ||
       action.id == "org.freedesktop.login1.reboot-multiple-sessions") return polkit.Result.YES;

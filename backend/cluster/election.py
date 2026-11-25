@@ -9,8 +9,13 @@ are detected via scans/beacons and reconciled deterministically by the total
 order on ``LeaderClaim`` with a "scout" exchange (see docs/network-recovery.md).
 
 Rules:
-* lower epoch wins (the longer-established leader is never preempted by a
-  newcomer); ties: higher priority, then lower node id.
+* a node with an audio input always wins over one without (its priority
+  carries AUDIO_BONUS); among equals the lower epoch wins (the longer-
+  established leader is never preempted by a newcomer); ties: higher
+  priority, then lower node id.
+* a healthy leader WITHOUT audio hands over to an audio follower once that
+  follower has been stable for AUDIO_HANDOVER_DELAY (controlled handover —
+  costs one network drop, see docs/network-recovery.md).
 * a node that boots or returns always *joins* an existing hotspot first.
 * a node that yielded enters an exponentially growing hold-down before it may
   start a hotspot again (prevents AP flapping under asymmetric range).
@@ -27,6 +32,10 @@ from backend.config import NetworkConfig
 from backend.network.base import EventKind, NetEvent, NetworkAdapter, RadioMode
 
 log = logging.getLogger("phos.election")
+
+
+AUDIO_BONUS = 1000          # added to the priority of a node with an audio input device
+AUDIO_HANDOVER_DELAY = 20.0  # audio follower must be stable this long before a handover
 
 
 class NodeState(str, Enum):
@@ -48,9 +57,14 @@ class LeaderClaim:
     priority: int
     node_id: str
 
+    @property
+    def audio(self) -> bool:
+        return self.priority >= AUDIO_BONUS
+
     def beats(self, other: "LeaderClaim") -> bool:
         """Deterministic total order: True if self should remain leader over other."""
-        return (self.epoch, -self.priority, self.node_id) < (other.epoch, -other.priority, other.node_id)
+        return (not self.audio, self.epoch, -self.priority, self.node_id) < \
+               (not other.audio, other.epoch, -other.priority, other.node_id)
 
     def to_dict(self) -> dict:
         return {"epoch": self.epoch, "priority": self.priority, "node_id": self.node_id}
@@ -137,6 +151,10 @@ class Election:
         self.discovery_started = 0.0
         self.boot = True
         self.conflicts_resolved = 0
+        self.audio_seen: dict[str, float] = {}
+        self.scan_started = -1e9      # when the scan in flight / last scan was requested
+        self.preflight_ok = False     # a scan requested after the backoff deadline found nothing
+        self._now = 0.0
 
     # ------------------------------------------------------------------ util
     def _go(self, new: NodeState, now: float, reason: str, deadline: float | None = None) -> None:
@@ -184,11 +202,46 @@ class Election:
         extra = 0.0
         if self.expected_leader and self.expected_leader[0] != self.id and now < self.expected_leader[1]:
             extra = self.expected_leader[1] - now
+        if self.priority < AUDIO_BONUS and not self._roster_known(now):
+            extra += self.cfg.backoff_slot  # fresh cluster boot: give a possible audio node the first slot
         return rank * self.cfg.backoff_slot + self.rng.uniform(0, self.cfg.backoff_jitter) + extra
 
-    def _scan(self) -> None:
+    def _roster_known(self, now: float) -> bool:
+        return any(now - p.last_seen <= self.ROSTER_TTL for p in self.peers.values())
+
+    def set_priority(self, priority: int, now: float) -> None:
+        """Effective priority changes (audio device plugged/unplugged)."""
+        if priority != self.priority:
+            log.info("%s: priority %s -> %s", self.id, self.priority, priority)
+            self.priority = priority
+            if self.my_claim:
+                self.my_claim = LeaderClaim(self.my_claim.epoch, priority, self.id)
+
+    def _audio_preemption(self, now: float) -> None:
+        """Leader without audio: hand the hotspot to a stable audio follower."""
+        if self.priority >= AUDIO_BONUS or self.pending_yield or now - self.leader_since < self.cfg.min_leader_tenure:
+            self.audio_seen.clear()
+            return
+        fol = set(self.followers(now))
+        for pid in list(self.audio_seen):
+            p = self.peers.get(pid)
+            if pid not in fol or not p or p.priority < AUDIO_BONUS:
+                del self.audio_seen[pid]
+        cands = [self.peers[f] for f in fol if f in self.peers and self.peers[f].priority >= AUDIO_BONUS
+                 and self.peers[f].info.get("can_lead") is not False]
+        for p in cands:
+            self.audio_seen.setdefault(p.id, now)
+        ready = [p for p in cands if now - self.audio_seen[p.id] >= AUDIO_HANDOVER_DELAY]
+        if ready:
+            target = max(ready, key=lambda p: (p.priority, p.id))
+            log.warning("%s: audio node %s present, handing over leadership", self.id, target.id)
+            self.audio_seen.clear()
+            self.request_handover(target.id, now)
+
+    def _scan(self, now: float | None = None) -> None:
         if not self.scan_pending and not self.net_pending:
             self.scan_pending = True
+            self.scan_started = self._now if now is None else now
             self.adapter.request_scan()
 
     # ---------------------------------------------------------------- beacon
@@ -366,6 +419,9 @@ class Election:
         k = ev.kind
         if k == EventKind.SCAN_RESULT:
             self.scan_pending = False
+            if self.state == NodeState.ELECTION_BACKOFF and self.deadline is not None \
+                    and self.scan_started >= self.deadline:
+                self.preflight_ok = True
             self._on_scan(ev.data or [], now)
             return
         self.net_pending = False
@@ -438,6 +494,7 @@ class Election:
         self.adapter.connect(bssid)
 
     def tick(self, now: float) -> None:
+        self._now = now
         s = self.state
         if s == NodeState.BOOTING:
             self._enter_discovery(now, "boot")
@@ -464,6 +521,9 @@ class Election:
         if s == NodeState.DISCOVERING:
             if self.deadline is not None and now >= self.deadline:
                 if self.can_lead and now >= self.holddown_until:
+                    # Pre-flight scan only when someone ranks above us (or an audio node might).
+                    self.preflight_ok = self._rank(now) == 0 and \
+                        (self.priority >= AUDIO_BONUS or self._roster_known(now))
                     self._go(NodeState.ELECTION_BACKOFF, now, f"no hotspot found (rank {self._rank(now)})",
                              now + self._backoff(now))
                 else:
@@ -475,6 +535,11 @@ class Election:
             if now >= (self.deadline or now):
                 if now < self.holddown_until:
                     self._go(NodeState.DISCOVERING, now, "hold-down active", self.holddown_until)
+                elif not self.preflight_ok:
+                    # Pre-flight: one complete scan *started after* the backoff deadline must
+                    # find no hotspot, otherwise a higher-ranked node's fresh AP could be missed.
+                    if not self.scan_pending:
+                        self._scan(now)
                 else:
                     self.boot = False
                     self._go(NodeState.STARTING_HOTSPOT, now, "backoff expired",
@@ -512,6 +577,9 @@ class Election:
                 self.leader = None
                 self._enter_discovery(now, f"leader {self.failed_leader} lost", short=True)
         elif s == NodeState.LEADER:
+            self._audio_preemption(now)
+            if self.state != NodeState.LEADER or self.pending_yield:
+                return
             if self.scout_sent or self.foreign:
                 self._maybe_order_scout(now)
             if now >= self.next_lone_rescan:

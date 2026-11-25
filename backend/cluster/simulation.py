@@ -328,7 +328,8 @@ class SimWorld:
         self.audio_nodes = set(nodes)
         for n in nodes:
             if n in self.handles:
-                self.handles[n].node.has_audio = True
+                h = self.handles[n]
+                h.node.set_has_audio(True, h.clock.local(self.now))
         k0 = max(0, math.ceil((self.now - phase0) * bpm / 60.0))
         self.at(self.music.beat_time(k0), lambda: self._beat(k0))
 

@@ -9,7 +9,7 @@ line-in. No router, no internet, no permanent master: the Pis form their own Wi-
 (`PHOSPHOR2000`, admin at `http://192.168.50.1:8080/admin/`) and hand the hotspot over when
 the leader disappears.
 
-> **Status:** software complete with 113 automated tests (unit, simulated cluster integration,
+> **Status:** software complete with 119 automated tests (unit, simulated cluster integration,
 > desktop-browser integration). **Not yet validated on real Pi/CRT hardware** — see
 > [docs/test-report.md](docs/test-report.md) and the checklist in [docs/hardware.md](docs/hardware.md).
 
@@ -21,7 +21,8 @@ the leader disappears.
   then priority) via scans and a scout node; edits in the losing partition are lost (calibration
   offsets are merged). This is not consensus.
 * **Unconnected clocks drift** (tens of ppm). Skew is estimated and uncertainty is shown on screen.
-* **Live BPM failover needs a second audio feed.** A leader without audio free-runs (PREDICTED).
+* **The Pi with the audio input is always the master.** If it fails, another Pi takes over but can
+  only free-run the last tempo (PREDICTED); live BPM failover needs a second audio feed.
 * **rAF ≠ photons.** Display latency is configurable and must be measured (camera/photodiode);
   Enter-key tapping is an alignment aid with human bias, not a latency measurement.
 

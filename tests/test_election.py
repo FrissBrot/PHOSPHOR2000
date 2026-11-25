@@ -68,11 +68,15 @@ def test_boot_discovery_backoff_hotspot_leader():
     e.handle_net_event(NetEvent(EventKind.SCAN_RESULT, []), 3)
     e.tick(5.1)
     assert e.state == NodeState.ELECTION_BACKOFF
-    assert e.deadline - 5.1 == 4.0  # rank 1 * slot
-    e.tick(9.2)
+    assert e.deadline - 5.1 == 8.0  # (rank 1 + 1 slot reserved for a possible audio node) * backoff_slot 4
+    e.scan_pending = False
+    e.tick(13.2)
+    assert e.state == NodeState.ELECTION_BACKOFF and "ap" not in ad.calls  # pre-flight scan first
+    e.handle_net_event(NetEvent(EventKind.SCAN_RESULT, []), 16.0)
+    e.tick(16.1)
     assert e.state == NodeState.STARTING_HOTSPOT and "ap" in ad.calls
     ad.mode = RadioMode.AP
-    e.handle_net_event(NetEvent(EventKind.HOTSPOT_UP, {"bssid": "AA:AA"}), 14)
+    e.handle_net_event(NetEvent(EventKind.HOTSPOT_UP, {"bssid": "AA:AA"}), 22)
     assert e.state == NodeState.LEADER and e.my_claim.epoch == 1
     states = [t.new for t in e.transitions]
     assert states == ["DISCOVERING", "ELECTION_BACKOFF", "STARTING_HOTSPOT", "LEADER"]

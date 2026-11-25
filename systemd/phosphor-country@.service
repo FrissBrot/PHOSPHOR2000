@@ -1,0 +1,7 @@
+# Applies the Wi-Fi regulatory country chosen in the admin dashboard (instance = ISO code).
+[Unit]
+Description=PHOSPHOR2000 Wi-Fi country %i
+
+[Service]
+Type=oneshot
+ExecStart=/opt/phosphor2000/scripts/set-wifi-country.sh %i

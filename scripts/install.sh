@@ -11,7 +11,8 @@
 # Options:
 #   --node-id pi-0N        persistent node id (priority from table: pi-01=100 ... pi-05=60)
 #   --priority N           override priority
-#   --country CC           Wi-Fi regulatory country (required for Wi-Fi)
+#   --country CC           initial Wi-Fi regulatory country (Pi OS blocks Wi-Fi until one is set);
+#                          later changes: admin dashboard -> Config -> Wi-Fi country
 #   --secrets FILE         cluster secrets (wifi_psk, cluster_key); admin password asked if unset
 #   --norm PAL|NTSC        composite norm (default PAL)
 #   --no-network           do not configure NetworkManager (manage: false = external network mode)
@@ -92,6 +93,8 @@ if [ ! -f "$PHOS_ETC/node.yaml" ] || ! grep -q "id: $NODE_ID" "$PHOS_ETC/node.ya
     echo "  id: $NODE_ID"
     [ -n "$PRIORITY" ] && echo "  priority: $PRIORITY"
     [ "$DO_NET" = 0 ] && printf 'network:\n  manage: false\n'
+    # initial Wi-Fi country; afterwards it is changed in the admin dashboard and replicated
+    [ -n "$COUNTRY" ] && printf 'site:\n  wifi_country: %s\n' "${COUNTRY^^}"
   } > "$PHOS_ETC/node.yaml"
   chmod 0640 "$PHOS_ETC/node.yaml"; chgrp phosphor "$PHOS_ETC/node.yaml"
 fi
@@ -137,7 +140,7 @@ c_info "5/9 polkit + systemd units"
 install -d -m 0755 /etc/polkit-1/rules.d
 install -m 0644 "$PHOS_PREFIX/systemd/50-phosphor.rules" /etc/polkit-1/rules.d/50-phosphor.rules
 for u in phosphor.target phosphor-core.service phosphor-audio.service phosphor-input.service \
-         phosphor-renderer.service phosphor-firewall.service; do
+         phosphor-renderer.service phosphor-firewall.service phosphor-country@.service; do
   install -m 0644 "$PHOS_PREFIX/systemd/$u" "/etc/systemd/system/$u"
 done
 run systemctl daemon-reload

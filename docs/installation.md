@@ -38,9 +38,11 @@ sudo scripts/install.sh --node-id pi-01 --country DE --secrets ~/cluster-secrets
 ```
 
 Use `pi-01` for the Pi you most want as leader (priority 100), then `pi-02` (90) … `pi-05` (60).
-The node with the USB audio interface does **not** need to be the leader; but if possible make the
-audio Pi `pi-01` or `pi-02` so that the usual leader also has live audio.
-`--country` is your Wi-Fi regulatory domain (2 letters). You are asked for the admin dashboard
+The Pi with the USB audio interface **automatically becomes the leader** (master), whatever its
+id; see network-recovery.md.
+`--country` is the initial Wi-Fi regulatory domain (2 letters, e.g. `CH`): Pi OS keeps Wi-Fi
+blocked until one is set, so it is needed once at install. Later changes: dashboard → Config →
+*Wi-Fi country* → applied on all Pis immediately and kept after reboot. You are asked for the admin dashboard
 password (≥ 8 chars) on the first Pi where it is not yet set; set it on every Pi
 (`sudo phosphor-passwd`) — the dashboard you reach is whichever Pi is currently leader.
 

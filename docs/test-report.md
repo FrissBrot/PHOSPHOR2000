@@ -6,7 +6,7 @@ on Raspberry Pi 3 / CRT hardware yet** — use docs/hardware.md to produce hardw
 Environment: Debian 13 x86_64 container, Python 3.11, Node 24, headless Chromium (Playwright build
 1248). Date: 2026-11-25.
 
-## Automated test suite (`pytest`, 113 tests)
+## Automated test suite (`pytest`, 119 tests)
 
 | area | file | kind |
 |---|---|---|
@@ -32,24 +32,25 @@ origins, audio onset noise 4 ms. Real Pi 3 radio timings are likely slower and b
 
 | scenario | nodes | runs | result (min / median / max) |
 |---|---|---|---|
-| simultaneous cold boot -> single leader (s) | 3 | 20 | 23.2 / 25.0 / 39.0 |
-| leader crash -> replacement leader, all following (s) | 3 | 20 | 23.5 / 24.2 / 25.8 |
-| beat spread between CRTs 20 s after failover (ms) | 3 | 20 | 0.1 / 0.6 / 1.9 |
-| simultaneous cold boot -> single leader (s) | 5 | 20 | 23.2 / 25.0 / 37.5 |
-| leader crash -> replacement leader, all following (s) | 5 | 20 | 23.8 / 25.0 / 26.2 |
-| beat spread between CRTs 20 s after failover (ms) | 5 | 20 | 0.2 / 1.6 / 2.7 |
-| split brain (2 hotspots) healed -> single leader (s) | 5 | 20 | 15.8 / 53.4 / 127.5 |
-| LIVE 100 BPM: future-beat spread across CRTs (ms) | 4 | 5 | 0.8 / 1.2 / 1.6 |
-| LIVE 100 BPM: worst CRT beat vs. true music beat (ms) | 4 | 5 | 1.0 / 1.7 / 2.3 |
-| LIVE 120 BPM: future-beat spread across CRTs (ms) | 4 | 5 | 0.6 / 0.8 / 2.6 |
-| LIVE 120 BPM: worst CRT beat vs. true music beat (ms) | 4 | 5 | 0.7 / 2.2 / 4.9 |
-| LIVE 128 BPM: future-beat spread across CRTs (ms) | 4 | 5 | 1.0 / 1.4 / 1.9 |
-| LIVE 128 BPM: worst CRT beat vs. true music beat (ms) | 4 | 5 | 2.3 / 3.0 / 4.9 |
-| LIVE 140 BPM: future-beat spread across CRTs (ms) | 4 | 5 | 1.1 / 1.3 / 2.2 |
-| LIVE 140 BPM: worst CRT beat vs. true music beat (ms) | 4 | 5 | 0.7 / 3.8 / 4.3 |
-| LIVE 160 BPM: future-beat spread across CRTs (ms) | 4 | 5 | 0.5 / 1.2 / 2.2 |
-| LIVE 160 BPM: worst CRT beat vs. true music beat (ms) | 4 | 5 | 0.4 / 3.0 / 4.2 |
-| 2 survivors isolated 120 s (no network at all): beat spread (ms) | 3 | 10 | 0.4 / 1.7 / 5.0 |
+| simultaneous cold boot -> single leader (s) | 3 | 20 | 39.5 / 39.5 / 43.5 |
+| leader crash -> replacement leader, all following (s) | 3 | 20 | 23.8 / 25.5 / 26.0 |
+| beat spread between CRTs 20 s after failover (ms) | 3 | 20 | 0.1 / 0.4 / 2.5 |
+| simultaneous cold boot -> single leader (s) | 5 | 20 | 39.2 / 41.5 / 43.5 |
+| leader crash -> replacement leader, all following (s) | 5 | 20 | 24.0 / 25.5 / 26.5 |
+| beat spread between CRTs 20 s after failover (ms) | 5 | 20 | 0.3 / 1.2 / 2.8 |
+| split brain (2 hotspots) healed -> single leader (s) | 5 | 20 | 44.2 / 52.2 / 174.5 |
+| LIVE 100 BPM: future-beat spread across CRTs (ms) | 4 | 5 | 0.9 / 1.4 / 2.1 |
+| LIVE 100 BPM: worst CRT beat vs. true music beat (ms) | 4 | 5 | 1.0 / 3.5 / 4.1 |
+| LIVE 120 BPM: future-beat spread across CRTs (ms) | 4 | 5 | 1.0 / 1.2 / 1.7 |
+| LIVE 120 BPM: worst CRT beat vs. true music beat (ms) | 4 | 5 | 0.8 / 0.9 / 3.7 |
+| LIVE 128 BPM: future-beat spread across CRTs (ms) | 4 | 5 | 0.3 / 0.8 / 1.7 |
+| LIVE 128 BPM: worst CRT beat vs. true music beat (ms) | 4 | 5 | 0.3 / 1.5 / 6.3 |
+| LIVE 140 BPM: future-beat spread across CRTs (ms) | 4 | 5 | 0.7 / 1.1 / 2.5 |
+| LIVE 140 BPM: worst CRT beat vs. true music beat (ms) | 4 | 5 | 0.9 / 1.5 / 2.6 |
+| LIVE 160 BPM: future-beat spread across CRTs (ms) | 4 | 5 | 0.7 / 1.0 / 1.7 |
+| LIVE 160 BPM: worst CRT beat vs. true music beat (ms) | 4 | 5 | 0.9 / 1.3 / 1.9 |
+| audio Pi appears as follower -> it is master, all following (s) | 5 | 20 | 40.0 / 41.1 / 83.2 |
+| 2 survivors isolated 120 s (no network at all): beat spread (ms) | 3 | 10 | 0.1 / 2.5 / 4.5 |
 
 ## Audio (synthetic signals, `tests/test_audio.py`)
 
@@ -67,7 +68,7 @@ measurement; H2 in docs/hardware.md is the real test.
 ## Known limitations
 
 * No hardware validation yet (radio timings, composite latency, Chromium on Pi 3 fps, real music).
-* Split-brain healing time depends on scan intervals (sim median ~53 s, max ~128 s).
+* Split-brain healing time depends on scan intervals (see table).
 * Configuration edits in a losing partition are discarded (offsets are merged).
 * The beat tracker is designed for four-on-the-floor DJ music; breaks, ambient or heavy
   syncopation lower confidence (→ PREDICTED/MANUAL).

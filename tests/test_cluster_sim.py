@@ -118,8 +118,8 @@ def test_controlled_handover():
 def test_all_clients_predict_same_future_beats(bpm):
     """Acceptance: identical future beat timestamps within measured clock error (SIMULATED)."""
     w = SimWorld(4, seed=int(bpm))
-    w.start_music(bpm, ["pi-03"])  # audio on a follower
-    run_until(w, lambda: settled(w, "pi-01"), 120)
+    w.start_music(bpm, ["pi-03"])  # audio input on pi-03 -> pi-03 always becomes leader
+    run_until(w, lambda: settled(w, "pi-03"), 180)
     w.run_for(45)
     nodes = sorted(w.states())
     for h in w.handles.values():
@@ -137,7 +137,7 @@ def test_all_clients_predict_same_future_beats(bpm):
 def test_audio_loss_switches_to_predicted_and_keeps_phase():
     w = SimWorld(3, seed=21)
     w.start_music(128, ["pi-02"])
-    run_until(w, lambda: settled(w, "pi-01"), 120)
+    run_until(w, lambda: settled(w, "pi-02"), 180)
     w.run_for(30)
     w.stop_music()
     w.run_for(10)
@@ -203,3 +203,54 @@ def test_offsets_changed_in_partition_are_merged():
     w.run_for(30)
     for h in w.handles.values():
         assert h.node.shared.calibration.offsets_ms.get("pi-04") == 12.0, h.nid
+
+
+def test_audio_node_is_leader_from_cold_boot():
+    w = SimWorld(4, seed=51)
+    w.audio_nodes = {"pi-04"}
+    for n in ("pi-01", "pi-02", "pi-03", "pi-04"):  # re-create nodes so pi-04 boots with its audio device
+        w.handles[n].alive = False
+        w.add_node(n)
+    dt = run_until(w, lambda: settled(w, "pi-04"), 200)
+    assert dt < 90
+
+
+def test_audio_node_returns_and_takes_over():
+    w = SimWorld(3, seed=52)
+    w.start_music(128, ["pi-03"])
+    run_until(w, lambda: settled(w, "pi-03"), 200)
+    w.run_for(20)
+    blob = w.crash("pi-03")
+    run_until(w, lambda: settled(w, "pi-01"), 200)  # no audio left: normal priority order
+    w.run_for(30)
+    h = w.add_node("pi-03", cache=blob)
+    h.node.set_has_audio(True, h.clock.local(w.now))
+    dt = run_until(w, lambda: settled(w, "pi-03"), 300)
+    w.run_for(60)
+    assert w.leaders() == ["pi-03"]          # and stays there: no oscillation
+    assert w.beat_spread_ms() < 5.0
+
+
+def test_split_brain_audio_side_wins_even_with_newer_epoch():
+    w = SimWorld(5, seed=53)
+    run_until(w, lambda: settled(w, "pi-01"), 200)
+    w.partition(["pi-01", "pi-02"], ["pi-03", "pi-04", "pi-05"])
+    run_until(w, lambda: len(w.leaders()) == 2, 200)
+    h5 = w.handles["pi-05"]
+    h5.node.set_has_audio(True, h5.clock.local(w.now))   # audio interface plugged into pi-05
+    run_until(w, lambda: "pi-05" in w.leaders() and len(w.leaders()) == 2, 300)
+    w.heal()
+    run_until(w, lambda: settled(w, "pi-05"), 600)
+    w.run_for(60)
+    assert w.leaders() == ["pi-05"]
+
+
+def test_handover_to_non_audio_node_is_refused_while_audio_node_online():
+    from backend.cluster.node import CommandError
+    w = SimWorld(3, seed=54)
+    w.start_music(120, ["pi-02"])
+    run_until(w, lambda: settled(w, "pi-02"), 200)
+    w.run_for(10)
+    h = w.handles["pi-02"]
+    with pytest.raises(CommandError):
+        h.node.command("handover", {"target": "pi-01"}, h.clock.local(w.now))

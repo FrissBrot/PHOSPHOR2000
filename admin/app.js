@@ -103,7 +103,7 @@ function cls(ok, warn) { return ok ? "ok" : warn ? "warn" : "bad"; }
 function renderNodes() {
   const t = $("#nodes");
   t.innerHTML = "";
-  t.append(el("tr", {}, ...["node", "state", "ip", "uptime", "scene", "BPM", "src", "skew ppm", "jitter", "±unc", "audio", "fps", "cpu %", "temp", "offset", ""].map((h) => el("th", {}, h))));
+  t.append(el("tr", {}, ...["node", "state", "ip", "uptime", "scene", "BPM", "src", "skew ppm", "jitter", "±unc", "audio", "fps", "cpu %", "temp", "offset", "Wi-Fi", ""].map((h) => el("th", {}, h))));
   const ids = Object.keys(S.nodes).sort();
   for (const id of ids) {
     const n = S.nodes[id];
@@ -117,7 +117,7 @@ function renderNodes() {
     actions.append(el("button", { class: "danger", onclick: () => confirm(`Reboot ${id}?`) && cmd("restart", { target: id, what: "reboot" }) }, "reboot"));
     const off = (S.shared.calibration.offsets_ms || {})[id];
     t.append(el("tr", {},
-      el("td", { class: online ? "ok" : "bad" }, id + (n.self ? " *" : "")),
+      el("td", { class: online ? "ok" : "bad" }, id + (n.self ? " *" : "") + ((n.effective_priority ?? n.priority) >= 1000 ? " [audio]" : "")),
       el("td", { class: cls(["LEADER", "FOLLOWER"].includes(n.state), true) }, n.state || "?"),
       el("td", {}, n.ip || (n.self ? location.hostname : "–")),
       el("td", {}, n.uptime ? `${Math.floor(n.uptime / 60)}m` : "–"),
@@ -129,7 +129,7 @@ function renderNodes() {
       el("td", { class: au.live ? "ok" : "" }, audio),
       el("td", { class: rd.fps && rd.fps < 20 ? "warn" : "" }, fmt(rd.fps, 1)),
       el("td", {}, fmt(me.cpu_pct, 0)), el("td", {}, me.temp_c ? `${fmt(me.temp_c, 0)}°` : "–"),
-      el("td", {}, off === undefined ? "0" : fmt(off, 1)), actions));
+      el("td", {}, off === undefined ? "0" : fmt(off, 1)), el("td", {}, n.wifi_country || "–"), actions));
   }
 }
 
@@ -313,6 +313,7 @@ function renderConfig() {
   set("#globOff", sh.timeline.global_visual_offset_ms); set("#dispLat", sh.timeline.display_latency_ms);
   set("#fpsCap", sh.display.fps_cap); set("#maxHz", sh.safety.max_flash_hz); set("#maxLum", sh.safety.max_flash_luminance);
   if (document.activeElement !== $("#reduced")) $("#reduced").checked = sh.safety.reduced_flashing;
+  set("#country", sh.site.wifi_country);
 }
 $("#timingSave").addEventListener("click", () => cmd("set_shared", { patch: {
   timeline: { global_visual_offset_ms: parseFloat($("#globOff").value), display_latency_ms: parseFloat($("#dispLat").value) },
@@ -320,6 +321,11 @@ $("#timingSave").addEventListener("click", () => cmd("set_shared", { patch: {
 $("#safetySave").addEventListener("click", () => cmd("set_shared", { patch: { safety: {
   reduced_flashing: $("#reduced").checked, max_flash_hz: parseFloat($("#maxHz").value), max_flash_luminance: parseFloat($("#maxLum").value) } } })
   .then(() => toast("safety settings applied", true)));
+$("#countrySave").addEventListener("click", () => {
+  const cc = $("#country").value.trim().toUpperCase();
+  if (!/^[A-Z]{2}$/.test(cc)) { toast("two letters, e.g. CH"); return; }
+  cmd("set_shared", { patch: { site: { wifi_country: cc } } }).then(() => toast(`Wi-Fi country ${cc} sent to all Pis`, true));
+});
 $("#importFile").addEventListener("change", async (ev) => {
   const f = ev.target.files[0]; if (!f) return;
   const text = await f.text();

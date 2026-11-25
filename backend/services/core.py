@@ -28,7 +28,7 @@ from backend.cluster.node import ClusterNode, CommandError
 from backend.config import ETC_DIR, STATE_DIR, AppConfig, load_config
 from backend.network.base import NetworkAdapter, NullAdapter
 from backend.storage.cache import EventLog, StateCache, boot_id
-from backend.services.system import CpuSampler, read_metrics, run_action
+from backend.services.system import CpuSampler, read_metrics, run_action, set_wifi_country
 
 log = logging.getLogger("phos.core")
 
@@ -132,6 +132,8 @@ class Core:
         self.udp: UdpTransport | None = None
         self.node = ClusterNode(cfg, adapter or make_adapter(cfg), self.send, has_audio=has_audio)
         self.node.on_restart_request = self._restart
+        if cfg.network.manage and not safe_mode():
+            self.node.on_wifi_country = set_wifi_country
         self.cache = StateCache(state_dir)
         self.events = EventLog(state_dir / "events.sqlite3")
         self.boot = boot_id()
@@ -173,6 +175,8 @@ class Core:
                 self.node.ingest_local_features(msg, now)
             elif t == "audio_status":
                 self.node.local_audio = {**msg, "_rx": now}
+                if self.cfg.audio.enabled not in ("off", False):
+                    self.node.set_has_audio(msg.get("state") not in ("NO_DEVICE", "DISABLED"), now)
             elif t == "key":
                 self.on_key(int(msg["code"]), int(msg.get("value", 1)), float(msg.get("local", now)), now)
         except (KeyError, ValueError, TypeError, CommandError) as exc:

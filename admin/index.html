@@ -159,6 +159,9 @@
       <div class="row wrap"><a id="exportBtn" class="btn" href="/api/config/export" download>export JSON</a>
         <label class="btn ghost">import JSON <input id="importFile" type="file" accept="application/json" class="hidden"></label>
         <button id="setTime" class="ghost">set cluster clock from this device</button></div>
+      <div class="row wrap"><label>Wi-Fi country (ISO, e.g. CH) <input id="country" maxlength="2" size="3" placeholder="CH"></label>
+        <button id="countrySave">apply on all Pis</button>
+        <span class="hint">regulatory domain for the PHOSPHOR2000 hotspot; applied immediately and kept after reboot</span></div>
       <p id="cfgMsg" class="msg"></p>
     </div>
   </section>

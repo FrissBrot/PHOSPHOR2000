@@ -62,7 +62,7 @@ class NetworkConfig(Strict):
     suspect_after: float = Field(3.5, gt=0)
     failure_after: float = Field(8.0, gt=0)
     discovery_window: float = Field(10.0, gt=0)
-    backoff_slot: float = Field(6.0, gt=0)
+    backoff_slot: float = Field(12.0, gt=0)
     backoff_jitter: float = Field(1.0, ge=0)
     min_leader_tenure: float = Field(20.0, ge=0)
     yield_holddown: float = Field(30.0, ge=0)
@@ -233,9 +233,16 @@ class AudioConfig(Strict):
     max_bpm: float = 180.0
 
 
+class SiteConfig(Strict):
+    # Wi-Fi regulatory country (ISO 3166 alpha-2), applied on every Pi by
+    # phosphor-country@XX.service. "" = leave the OS setting alone.
+    wifi_country: str = Field("", pattern=r"^([A-Z]{2})?$")
+
+
 class SharedConfig(Strict):
     """The replicated, revisioned part of the configuration."""
 
+    site: SiteConfig = SiteConfig()
     scenes: ScenesConfig = ScenesConfig()
     safety: SafetyConfig = SafetyConfig()
     calibration: CalibrationConfig = CalibrationConfig()
@@ -267,11 +274,13 @@ class AppConfig(Strict):
     safety: SafetyConfig = SafetyConfig()
     calibration: CalibrationConfig = CalibrationConfig()
     display: DisplayConfig = DisplayConfig()
+    site: SiteConfig = SiteConfig()
     audio: AudioConfig = AudioConfig()
     secrets: Secrets = Secrets()
 
     def shared(self) -> SharedConfig:
         return SharedConfig(
+            site=self.site,
             scenes=self.scenes,
             safety=self.safety,
             calibration=self.calibration,
@@ -282,6 +291,7 @@ class AppConfig(Strict):
     def with_shared(self, shared: SharedConfig) -> "AppConfig":
         return self.model_copy(
             update={
+                "site": shared.site,
                 "scenes": shared.scenes,
                 "safety": shared.safety,
                 "calibration": shared.calibration,
