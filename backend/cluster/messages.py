@@ -91,3 +91,43 @@ def derive_key(cluster_key: str) -> bytes:
         # Development default only; installer always generates a random key.
         cluster_key = "phosphor2000-insecure-dev-key"
     return hashlib.sha256(b"phos-udp|" + cluster_key.encode()).digest()
+
+
+# ---------------------------------------------------------------------------
+# Small secrets (e.g. the venue Wi-Fi password) travelling inside cluster state:
+# encrypt-then-MAC with keys derived from the cluster key. Keystream = SHA-256 in counter
+# mode over (key, nonce, counter) — a PRF stream cipher; integrity by HMAC-SHA256.
+# ---------------------------------------------------------------------------
+import base64 as _b64
+
+
+def _keys(cluster_key: str) -> tuple[bytes, bytes]:
+    base = hashlib.sha256(b"phos-seal|" + cluster_key.encode()).digest()
+    return hashlib.sha256(base + b"|enc").digest(), hashlib.sha256(base + b"|mac").digest()
+
+
+def _stream(k: bytes, nonce: bytes, n: int) -> bytes:
+    out = bytearray()
+    ctr = 0
+    while len(out) < n:
+        out += hashlib.sha256(k + nonce + ctr.to_bytes(8, "big")).digest()
+        ctr += 1
+    return bytes(out[:n])
+
+
+def seal(cluster_key: str, plaintext: str) -> str:
+    ek, mk = _keys(cluster_key)
+    nonce = os.urandom(16)
+    data = plaintext.encode()
+    ct = bytes(a ^ b for a, b in zip(data, _stream(ek, nonce, len(data))))
+    tag = hmac.new(mk, nonce + ct, hashlib.sha256).digest()
+    return _b64.urlsafe_b64encode(nonce + tag + ct).decode()
+
+
+def unseal(cluster_key: str, token: str) -> str:
+    ek, mk = _keys(cluster_key)
+    raw = _b64.urlsafe_b64decode(token.encode())
+    nonce, tag, ct = raw[:16], raw[16:48], raw[48:]
+    if not hmac.compare_digest(tag, hmac.new(mk, nonce + ct, hashlib.sha256).digest()):
+        raise CodecError("sealed value: bad MAC")
+    return bytes(a ^ b for a, b in zip(ct, _stream(ek, nonce, len(ct)))).decode()

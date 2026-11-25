@@ -136,6 +136,17 @@ class NmcliAdapter(NetworkAdapter):
         # brcmfmac on Pi 3 does not reliably scan while serving an AP.
         return False
 
+    def set_uplink(self, on: bool) -> None:
+        """Use the leader as internet gateway (its NM 'shared' AP already NATs to its Ethernet)."""
+        self._enqueue(("uplink", on))
+
+    def _op_uplink(self, on: bool) -> None:
+        self._nm("connection", "modify", self.cfg.sta_connection,
+                 "ipv4.never-default", "no" if on else "yes", "ipv4.route-metric", "700", timeout=10)
+        if self.status().mode == RadioMode.STATION:
+            # apply to the running connection without dropping it
+            self._nm("device", "reapply", self.cfg.interface, timeout=10)
+
     def close(self) -> None:
         self._stop.set()
         self._enqueue(("noop",))
@@ -150,7 +161,7 @@ class NmcliAdapter(NetworkAdapter):
     def _enqueue(self, op: tuple) -> None:
         # Mode changes supersede queued mode changes (only the latest intent matters).
         if op[0] in ("ap", "sta", "stop"):
-            kept = []
+            kept = []  # mode changes supersede queued mode changes
             while True:
                 try:
                     o = self._ops.get_nowait()
@@ -352,6 +363,84 @@ method=disabled
 """
 
 
+def cluster_address(cfg: NetworkConfig, node_id: str) -> str:
+    n = int(node_id.split("-")[1])
+    return f"{cfg.cluster_net}.{10 + n}"
+
+
+def wlan_keyfile(cfg: NetworkConfig, psk: str, node_id: str, autoconnect: bool) -> str:
+    sec = (f"\n[wifi-security]\nkey-mgmt=wpa-psk\npsk={psk}\n" if psk else "")
+    return f"""[connection]
+id={cfg.wlan_connection}
+type=wifi
+interface-name={cfg.interface}
+autoconnect={'true' if autoconnect else 'false'}
+autoconnect-priority=100
+autoconnect-retries=0
+
+[wifi]
+mode=infrastructure
+ssid={cfg.wlan_ssid}
+powersave=2
+{sec}
+[ipv4]
+method=auto
+# fixed cluster address in addition to DHCP: works even if the Wi-Fi has no DHCP server
+address1={cluster_address(cfg, node_id)}/24
+dhcp-timeout=2147483647
+may-fail=true
+
+[ipv6]
+method=disabled
+"""
+
+
+def eth_keyfile(cfg: NetworkConfig, node_id: str, autoconnect: bool) -> str:
+    return f"""[connection]
+id={cfg.eth_connection}
+type=ethernet
+interface-name={cfg.eth_interface}
+autoconnect={'true' if autoconnect else 'false'}
+autoconnect-priority=100
+autoconnect-retries=0
+
+[ipv4]
+method=auto
+# fixed cluster address in addition to DHCP: a plain switch without router works too
+address1={cluster_address(cfg, node_id)}/24
+dhcp-timeout=2147483647
+may-fail=true
+
+[ipv6]
+method=disabled
+"""
+
+
+def write_mode_keyfiles(cfg: NetworkConfig, node_id: str, psk: str, wlan_psk: str, directory: Path) -> list[Path]:
+    """All PHOSPHOR profiles for the configured mode (hotspot profiles always exist)."""
+    out = write_keyfiles(cfg, psk, directory)
+    files = {cfg.eth_connection: eth_keyfile(cfg, node_id, cfg.mode == "ethernet")}
+    if cfg.wlan_ssid:
+        if wlan_psk and (not 8 <= len(wlan_psk) <= 63 or any(ord(c) < 32 for c in wlan_psk)):
+            raise ValueError("Wi-Fi passphrase must be 8..63 printable characters")
+        files[cfg.wlan_connection] = wlan_keyfile(cfg, wlan_psk, node_id, cfg.mode == "wlan")
+    elif cfg.mode == "wlan":
+        raise ValueError("network mode wlan needs wlan_ssid")
+    for name, text in files.items():
+        if any(c in text for c in "\r"):
+            raise ValueError("invalid characters")
+        p = directory / f"{name}.nmconnection"
+        tmp = p.with_suffix(".tmp")
+        tmp.touch(mode=0o600)
+        tmp.chmod(0o600)
+        tmp.write_text(text)
+        tmp.replace(p)
+        out.append(p)
+    if not cfg.wlan_ssid:
+        (directory / f"{cfg.wlan_connection}.nmconnection").unlink(missing_ok=True)
+    return out
+
+
 def write_keyfiles(cfg: NetworkConfig, psk: str, directory: Path) -> list[Path]:
     if not 8 <= len(psk) <= 63:
         raise ValueError("WPA2 passphrase must be 8..63 characters")
@@ -382,7 +471,11 @@ def _cli() -> None:  # pragma: no cover - exercised by scripts
     cfg = load_config()
     if not cfg.secrets.wifi_psk:
         sys.exit("secrets.yaml has no wifi_psk")
-    for p in write_keyfiles(cfg.network, cfg.secrets.wifi_psk, Path(a.dir)):
+    try:
+        paths = write_mode_keyfiles(cfg.network, cfg.node.id, cfg.secrets.wifi_psk, cfg.secrets.wlan_psk, Path(a.dir))
+    except ValueError as exc:
+        sys.exit(str(exc))
+    for p in paths:
         print(p)
 
 

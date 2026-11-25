@@ -48,7 +48,20 @@ class NodeConfig(Strict):
         return v
 
 
+NETWORK_MODES = ("hotspot", "wlan", "ethernet")
+
+
 class NetworkConfig(Strict):
+    # hotspot : the leader runs the PHOSPHOR2000 access point, all others join it (default)
+    # wlan    : all Pis join an existing Wi-Fi (wlan_ssid / secrets.wlan_psk)
+    # ethernet: all Pis on one switch; the leader additionally runs the admin hotspot
+    mode: Literal["hotspot", "wlan", "ethernet"] = "hotspot"
+    wlan_ssid: str = Field("", max_length=32, pattern=r"^[^\x00-\x1f\x7f]*$")
+    eth_interface: str = Field("eth0", pattern=r"^[a-zA-Z0-9_.-]{1,15}$")
+    wlan_connection: str = Field("phosphor-wlan", pattern=r"^[a-zA-Z0-9_-]{1,32}$")
+    eth_connection: str = Field("phosphor-eth", pattern=r"^[a-zA-Z0-9_-]{1,32}$")
+    # fixed cluster addresses (10.20.0.1x) in wlan/ethernet mode: works without any DHCP server
+    cluster_net: str = Field("10.20.0", pattern=r"^\d{1,3}\.\d{1,3}\.\d{1,3}$")
     manage: bool = True
     interface: str = Field("wlan0", pattern=r"^[a-zA-Z0-9_.-]{1,15}$")
     ssid: str = Field("PHOSPHOR2000", min_length=1, max_length=32)
@@ -237,6 +250,13 @@ class SiteConfig(Strict):
     # Wi-Fi regulatory country (ISO 3166 alpha-2), applied on every Pi by
     # phosphor-country@XX.service. "" = leave the OS setting alone.
     wifi_country: str = Field("", pattern=r"^([A-Z]{2})?$")
+    # hotspot mode: the Pis use the leader's Ethernet internet (NAT) for package/software updates
+    share_internet: bool = False
+    # cluster-wide network mode change requested from the dashboard (net_rev increments per request)
+    net_mode: Literal["hotspot", "wlan", "ethernet"] | None = None
+    net_wlan_ssid: str = Field("", max_length=32, pattern=r"^[^\x00-\x1f\x7f]*$")
+    net_wlan_psk_sealed: str = Field("", max_length=400)
+    net_rev: int = Field(0, ge=0)
 
 
 class UpdatePolicy(Strict):
@@ -267,11 +287,12 @@ class SharedConfig(Strict):
 
 class Secrets(Strict):
     wifi_psk: str = ""
+    wlan_psk: str = ""            # existing Wi-Fi in network mode "wlan"
     cluster_key: str = ""
     admin_password_hash: str = ""
     session_secret: str = ""
 
-    @field_validator("wifi_psk")
+    @field_validator("wifi_psk", "wlan_psk")
     @classmethod
     def _psk(cls, v: str) -> str:
         if v and not (8 <= len(v) <= 63):
@@ -337,6 +358,16 @@ def _read_yaml(path: Path) -> dict[str, Any]:
     if not isinstance(data, dict):
         raise ValueError(f"{path}: top level must be a mapping")
     return data
+
+
+def update_node_yaml(path: Path, updates: dict[str, Any]) -> None:
+    """Deep-merge updates into node.yaml (atomic, keeps comments-free YAML)."""
+    data = _read_yaml(path)
+    data = deep_merge(data, updates)
+    tmp = path.with_name(path.name + ".tmp")
+    tmp.write_text(yaml.safe_dump(data, sort_keys=False))
+    os.chmod(tmp, 0o640)
+    os.replace(tmp, path)
 
 
 def load_config(

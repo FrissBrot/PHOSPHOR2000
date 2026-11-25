@@ -1,0 +1,8 @@
+# Network mode change requested from the dashboard (request file written by the core).
+[Unit]
+Description=PHOSPHOR2000 network mode change
+
+[Service]
+Type=oneshot
+ExecStart=/opt/phosphor2000/scripts/set-network-mode.sh /run/phosphor2000/netmode-request.json
+TimeoutStartSec=180

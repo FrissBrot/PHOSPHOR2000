@@ -1,0 +1,10 @@
+# Raspberry Pi OS package updates requested from the dashboard.
+[Unit]
+Description=PHOSPHOR2000 OS package update
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/opt/phosphor2000/scripts/os-update.sh
+TimeoutStartSec=4000
+Nice=10

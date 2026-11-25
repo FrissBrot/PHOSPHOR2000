@@ -12,10 +12,14 @@ from typing import TYPE_CHECKING
 from fastapi import FastAPI, HTTPException, Request, Response, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import ValidationError
+from typing import Literal
+
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
+
+from backend.cluster.messages import seal
 
 from backend.api.auth import COOKIE, CSRF_HEADER, RateLimiter, Sessions, hash_password, verify_password
-from backend.api.models import COMMANDS, Login, PasswordChange
+from backend.api.models import COMMANDS, Login, NetModeBody, PasswordChange
 from backend.cluster.node import CommandError
 from backend.config import REPO_ROOT, SharedConfig
 
@@ -161,6 +165,10 @@ def create_app(core: "Core") -> FastAPI:
             "transitions": [{**t.__dict__, "wall": time.time() - (now - t.at)} for t in el.transitions[-30:]],
             "safe_mode": not node.cfg.network.manage,
             "update": upd.status() if upd else None,
+            "network": {**core.netmode.status(), "share_internet": node.shared.site.share_internet,
+                        "pending": node.shared.site.net_mode, "wlan_ssid": core.cfg.network.wlan_ssid,
+                        "internet": core.inet.ok} if hasattr(core, "netmode") else None,
+            "packages": {"job": core.packages.job(), "rollout": core.packages.rollout} if hasattr(core, "packages") else None,
         }
 
     @app.get("/api/status")
@@ -254,6 +262,41 @@ def create_app(core: "Core") -> FastAPI:
             raise HTTPException(403 if not upd.check_sig("bundle|" + v, sig) else 404, "not available")
         path, sha = await asyncio.get_running_loop().run_in_executor(None, upd.bundle)
         return FileResponse(path, media_type="application/gzip", headers={"X-SHA256": sha})
+
+    # ------------------------------------------------------------- network + packages
+    @app.post("/api/network/mode")
+    async def network_mode(body: NetModeBody, request: Request):
+        """Switch ALL Pis to another network mode (applied after 15 s, automatic fallback after 3 min)."""
+        require(request, mutating=True)
+        if body.wlan_psk and not 8 <= len(body.wlan_psk) <= 63:
+            raise HTTPException(422, "Wi-Fi password must be 8..63 characters")
+        if not core.cfg.secrets.cluster_key and body.wlan_psk:
+            raise HTTPException(409, "no cluster key configured: cannot distribute a Wi-Fi password securely")
+        sealed = seal(core.cfg.secrets.cluster_key, body.wlan_psk) if body.wlan_psk else ""
+        try:
+            return node.command("set_network_mode", {"mode": body.mode, "wlan_ssid": body.wlan_ssid,
+                                                     "wlan_psk_sealed": sealed}, time.monotonic(), origin="admin")
+        except CommandError as exc:
+            raise HTTPException(409, str(exc))
+
+    @app.post("/api/packages/self")
+    async def packages_self(request: Request):
+        require(request, mutating=True)
+        _upd(core.packages.run_local)
+        return {"ok": True, "message": f"package update started on {node.id}"}
+
+    @app.post("/api/packages/all")
+    async def packages_all(request: Request, force: bool = False):
+        require(request, mutating=True)
+        return {"ok": True, "rollout": _upd(lambda: core.packages.start_all(time.monotonic(), force=force))}
+
+    @app.post("/api/internet/check")
+    async def internet_check(request: Request):
+        require(request, mutating=True)
+        core.inet.force()
+        core.inet.tick(time.monotonic(), wanted=True)
+        await asyncio.sleep(5)
+        return {"internet": core.inet.ok}
 
     @app.get("/api/config/export")
     async def export_config(request: Request):

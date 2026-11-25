@@ -9,7 +9,7 @@ line-in. No router, no internet, no permanent master: the Pis form their own Wi-
 (`PHOSPHOR2000`, admin at `http://192.168.50.1:8080/admin/`) and hand the hotspot over when
 the leader disappears.
 
-> **Status:** software complete with 147 automated tests (unit, simulated cluster integration,
+> **Status:** software complete with 156 automated tests (unit, simulated cluster integration,
 > desktop-browser integration). **Not yet validated on real Pi/CRT hardware** — see
 > [docs/test-report.md](docs/test-report.md) and the checklist in [docs/hardware.md](docs/hardware.md).
 
@@ -52,6 +52,7 @@ the leader disappears.
 | [network-recovery](docs/network-recovery.md) | network states, election, split brain, limits, recovery |
 | [synchronization](docs/synchronization.md) | audio→beat→cluster clock→frame, offsets, calibration, camera/photodiode |
 | [hardware](docs/hardware.md) | risks and the real-hardware validation checklist |
+| [network-modes](docs/network-modes.md) | hotspot / existing Wi-Fi / Ethernet switch, internet sharing, OS package updates |
 | [updates-and-robustness](docs/updates-and-robustness.md) | updates from the dashboard, watchdogs, power-cut protection |
 | [troubleshooting](docs/troubleshooting.md) | symptoms → fixes |
 | [test-report](docs/test-report.md) | what was tested how (simulated vs hardware) |

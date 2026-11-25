@@ -363,16 +363,29 @@ function renderUpdates() {
   const u = S.update;
   if (!u) return;
   const t = $("#verTable"); t.innerHTML = "";
-  t.append(el("tr", {}, ...["Pi", "state", "version", ""].map((h) => el("th", {}, h))));
+  t.append(el("tr", {}, ...["Pi", "state", "version", "network", "internet", "packages", ""].map((h) => el("th", {}, h))));
   for (const id of Object.keys(S.nodes).sort()) {
     const n = S.nodes[id];
     const v = n.version || n.ver || "?";
     const tr = el("tr", {}, el("td", {}, id + (n.self ? " *" : "")), el("td", {}, n.state || "?"),
       el("td", { class: v === u.newest ? "ok" : "warn" }, v + (v === u.newest ? "" : "  (older)")),
+      el("td", {}, n.net_mode || "?"),
+      el("td", { class: n.internet ? "ok" : "" }, n.internet == null ? "–" : (n.internet ? "yes" : "no")),
+      el("td", { class: n.apt && n.apt.state === "error" ? "warn" : "" },
+         n.apt ? `${n.apt.state}${n.apt.upgraded ? " (" + n.apt.upgraded + ")" : ""}${n.apt.reboot_required ? " – reboot!" : ""}` : "–"),
       el("td", {}, el("button", { class: "ghost", onclick: () => confirm(`Roll ${id} back to its previous version?`) &&
         api(`/api/update/rollback/${id}`, {}).then(() => toast("rollback requested", true)) }, "roll back")));
     t.append(tr);
   }
+  const pk = S.packages || {};
+  const pj = pk.job || {}, pr = pk.rollout;
+  $("#aptMsg").textContent = [pj.state ? `this Pi: ${pj.state} — ${pj.message}` : "",
+    pr ? `all Pis: ${pr.state} — ${pr.message}` : ""].filter(Boolean).join("  ·  ");
+  const nw = S.network || {};
+  $("#netInfo").textContent = `current mode: ${nw.mode}` + (nw.pending ? `  ·  change to '${nw.pending}' requested` : "") +
+    (nw.trial ? `  ·  checking new mode '${nw.trial.target}'…` : "") + `  ·  internet here: ${nw.internet == null ? "unknown" : nw.internet ? "yes" : "no"}`;
+  if (!$("#netApply").dataset.touched) { $("#netMode").value = nw.mode || "hotspot"; $("#netSsid").value = nw.wlan_ssid || ""; }
+  if (!$("#shareSave").dataset.touched) $("#shareNet").checked = !!nw.share_internet;
   const r = u.rollout, j = u.job || {};
   const parts = [];
   if (j.state) parts.push(`this Pi: ${j.state} — ${j.message || ""}`);
@@ -387,6 +400,22 @@ function renderUpdates() {
     $("#idleMin").value = p.idle_minutes; $("#ghHours").value = p.github_check_hours;
   }
 }
+["#netMode", "#netSsid", "#netPsk"].forEach((id) => $(id).addEventListener("input", () => ($("#netApply").dataset.touched = "1")));
+$("#shareNet").addEventListener("change", () => ($("#shareSave").dataset.touched = "1"));
+$("#netApply").addEventListener("click", () => {
+  const mode = $("#netMode").value, ssid = $("#netSsid").value.trim(), psk = $("#netPsk").value;
+  if (mode === "wlan" && !ssid) { toast("Wi-Fi name required"); return; }
+  if (!confirm(`Switch ALL Pis to '${mode}' in 15 s? The dashboard will be unreachable for a while.`)) return;
+  api("/api/network/mode", { mode, wlan_ssid: ssid, wlan_psk: psk })
+    .then(() => { $("#netPsk").value = ""; delete $("#netApply").dataset.touched; toast("network change sent to all Pis", true); });
+});
+$("#shareSave").addEventListener("click", () => cmd("set_shared", { patch: { site: { share_internet: $("#shareNet").checked } } })
+  .then(() => { delete $("#shareSave").dataset.touched; toast("saved", true); }));
+$("#netCheck").addEventListener("click", () => api("/api/internet/check", {}).then((r) => toast(`internet on this Pi: ${r.internet ? "yes" : "no"}`, !!r.internet)));
+$("#aptSelf").addEventListener("click", () => confirm("Update the OS packages of THIS Pi now?") &&
+  api("/api/packages/self", {}).then((r) => toast(r.message, true)));
+$("#aptAll").addEventListener("click", () => confirm("Update the OS packages of all Pis, one after the other?") &&
+  api(`/api/packages/all?force=${$("#aptForce").checked}`, {}).then(() => toast("package updates started", true)));
 $("#updCheck").addEventListener("click", () => api("/api/update/check", {}).then(() => toast("checked", true)));
 $("#updSelf").addEventListener("click", () => confirm("Download the newest version from GitHub onto THIS Pi?") &&
   api("/api/update/self", {}).then((r) => toast(r.message, true)));

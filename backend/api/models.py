@@ -24,6 +24,12 @@ class PasswordChange(M):
     new: str = Field(min_length=8, max_length=256)
 
 
+class NetModeBody(M):
+    mode: Literal["hotspot", "wlan", "ethernet"]
+    wlan_ssid: str = Field("", max_length=32, pattern=r"^[^\x00-\x1f\x7f]*$")
+    wlan_psk: str = Field("", max_length=63)
+
+
 class SetBpm(M):
     bpm: float = Field(ge=40, le=240)
 

@@ -71,6 +71,24 @@ def request_persist() -> bool:
         return False
 
 
+def start_unit(unit: str) -> bool:
+    """Start one of the whitelisted root oneshots (polkit allows exactly these)."""
+    allowed = {"phosphor-netmode.service", "phosphor-apt.service", "phosphor-update.service",
+               "phosphor-persist.service"}
+    if unit not in allowed:
+        raise ValueError("unit not allowed")
+    argv = ["/usr/bin/systemctl", "--no-ask-password", "--no-block", "start", unit]
+    if os.environ.get("PHOSPHOR_DRY_RUN") == "1":
+        log.warning("dry-run: would execute %s", argv)
+        return True
+    try:
+        return subprocess.run(argv, stdin=subprocess.DEVNULL, capture_output=True, timeout=10,
+                              env={"PATH": "/usr/bin:/bin"}).returncode == 0
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        log.error("starting %s failed: %s", unit, exc)
+        return False
+
+
 def request_update() -> bool:
     """Start the root oneshot phosphor-update.service (reads /run/phosphor2000/update-request.json)."""
     argv = ["/usr/bin/systemctl", "--no-ask-password", "--no-block", "start", "phosphor-update.service"]

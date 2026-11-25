@@ -49,6 +49,11 @@ def make_adapter(cfg: AppConfig) -> NetworkAdapter:
     if not cfg.network.manage or safe_mode():
         log.warning("network management disabled (config or safe-mode flag): radio untouched")
         return NullAdapter()
+    if cfg.network.mode in ("wlan", "ethernet"):
+        # The network exists independently of the Pis (venue Wi-Fi / switch): no hotspot
+        # ownership to negotiate, the election runs directly over the shared L2 network.
+        log.info("network mode %s: election over the existing network", cfg.network.mode)
+        return NullAdapter()
     if not shutil.which("nmcli"):
         log.error("nmcli not found: running without network management")
         return NullAdapter()
@@ -185,6 +190,16 @@ class Core:
             log.error("no cluster_key in secrets.yaml: using an INSECURE development key")
         net = ipaddress.ip_network(f"{cfg.network.gateway}/{cfg.network.prefix}", strict=False)
         self.broadcast = str(net.broadcast_address)
+        from backend.network.links import InternetProbe, Interfaces, MdnsAlias
+        mode = cfg.network.mode if (cfg.network.manage and not safe_mode()) else "external"
+        self.ifaces = Interfaces(self.broadcast if mode == "hotspot" else "255.255.255.255",
+                                 only_iface={"hotspot": None, "wlan": cfg.network.interface,
+                                             "ethernet": cfg.network.eth_interface}.get(mode))
+        self.mdns = MdnsAlias()
+        self.inet = InternetProbe()
+        self.admin_ap = None          # ethernet mode: the leader also runs the admin hotspot
+        self.admin_ap_on = False
+        self.uplink_applied: bool | None = None
         self.udp: UdpTransport | None = None
         self.node = ClusterNode(cfg, adapter or make_adapter(cfg), self.send, has_audio=has_audio)
         self.node.on_restart_request = self._restart
@@ -201,6 +216,11 @@ class Core:
         from backend.update import Updater
         self.updater = Updater(self, RUN_DIR)
         self.node.on_update_message = self.updater.on_message
+        from backend.netmode import NetModeManager
+        from backend.packages import PackageUpdater
+        self.netmode = NetModeManager(self, state_dir, RUN_DIR)
+        self.packages = PackageUpdater(self, RUN_DIR)
+        self.node.on_apt_message = self.packages.on_message
         self.persist_due: float | None = None
         if cfg.network.manage and not safe_mode():
             self.node.on_wifi_country = set_wifi_country
@@ -239,11 +259,12 @@ class Core:
             log.exception("encode failed for %s", msg.get("t"))
             return
         ip = self.node.peer_ips.get(to) if to else None
-        try:
-            self.udp.sendto(data, (ip or self.broadcast, self.cfg.network.udp_port))
-            self.tx += 1
-        except OSError:
-            self.tx_errors += 1
+        for dest in ([ip] if ip else self.ifaces.broadcasts()):
+            try:
+                self.udp.sendto(data, (dest, self.cfg.network.udp_port))
+                self.tx += 1
+            except OSError:
+                self.tx_errors += 1
 
     def on_local(self, msg: dict) -> None:
         now = time.monotonic()
@@ -327,6 +348,14 @@ class Core:
             if self.node.dirty and time.monotonic() - self.cache.last_write > 10.0:
                 self.persist()
             self.renderer_watchdog(now)
+            self.network_tick(now)
+            for part in (self.netmode, self.packages):
+                try:
+                    part.tick(now)
+                except Exception:
+                    log.exception("%s tick failed", type(part).__name__)
+            self.node.apt_job = self.packages.job() or None
+            self.node.net_failed_rev = self.netmode.failed_rev
             try:
                 self.updater.tick(now)
             except Exception:
@@ -336,6 +365,38 @@ class Core:
                 request_persist()
             notify("WATCHDOG=1")   # systemd restarts us if this loop ever hangs (WatchdogSec)
             await asyncio.sleep(0.05)
+
+    def network_tick(self, now: float) -> None:
+        """Mode-specific extras: interface list, admin hotspot, mDNS alias, internet sharing."""
+        net = self.cfg.network
+        self.ifaces.refresh(now)
+        managed = net.manage and not safe_mode()
+        leader = self.node.is_leader()
+        if managed and net.mode == "ethernet":
+            if self.admin_ap is None and shutil.which("nmcli"):
+                from backend.network.nmcli import NmcliAdapter
+                self.admin_ap = NmcliAdapter(net)
+            if self.admin_ap is not None and leader != self.admin_ap_on:
+                self.admin_ap_on = leader
+                (self.admin_ap.start_hotspot if leader else self.admin_ap.stop)()
+                self.node._log("info", f"admin hotspot {'on' if leader else 'off'} (ethernet mode)")
+            if self.admin_ap is not None:
+                self.admin_ap.poll_events()
+        if net.mode in ("wlan", "ethernet"):
+            iface = net.interface if net.mode == "wlan" else net.eth_interface
+            self.mdns.ensure(self.ifaces.address_of(iface) if leader else None)
+        share = self.node.shared.site.share_internet
+        if managed and net.mode == "hotspot" and share != self.uplink_applied:
+            setter = getattr(self.node.election.adapter, "set_uplink", None)
+            if setter:
+                setter(share)
+                self.node._log("info", f"internet via the leader {'enabled' if share else 'disabled'}")
+            self.uplink_applied = share
+        self.node.internet = self.inet.ok
+        self.inet.tick(now, wanted=share or net.mode != "hotspot" or self.apt_wanted())
+
+    def apt_wanted(self) -> bool:
+        return bool(self.packages.rollout and self.packages.rollout.get("state") == "running") or self.packages.busy()
 
     RENDERER_SILENT_S = 45.0       # no report from the browser for this long -> hung/crashed page
     RENDERER_FIRST_S = 240.0       # grace after core start (Chromium cold start on a Pi 3)

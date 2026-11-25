@@ -167,6 +167,26 @@
       <p id="cfgMsg" class="msg"></p>
     </div>
     <div class="card">
+      <h3>Network (all Pis)</h3>
+      <div id="netInfo" class="sub"></div>
+      <div class="row wrap">
+        <label>mode <select id="netMode"><option value="hotspot">hotspot (PHOSPHOR2000 Wi-Fi from the master)</option>
+          <option value="wlan">existing Wi-Fi</option><option value="ethernet">cable via switch</option></select></label>
+        <label>Wi-Fi name <input id="netSsid" maxlength="32" placeholder="SSID"></label>
+        <label>Wi-Fi password <input id="netPsk" type="password" maxlength="63" autocomplete="off" placeholder="unchanged"></label>
+        <button id="netApply">switch all Pis</button>
+      </div>
+      <p class="hint">All Pis switch 15 s after you confirm. Each Pi checks that it finds the others again within
+        3 minutes, otherwise it returns to the previous mode by itself. Dashboard afterwards: hotspot and cable mode
+        <b>http://192.168.50.1:8080/admin/</b> (in cable mode the master opens the PHOSPHOR2000 Wi-Fi for phones);
+        existing Wi-Fi: <b>http://phosphor.local:8080/admin/</b> or any Pi's address.</p>
+      <div class="row wrap">
+        <label class="chk"><input id="shareNet" type="checkbox"> share the master's cable internet with all Pis (hotspot mode)</label>
+        <button id="shareSave" class="ghost">save</button>
+        <button id="netCheck" class="ghost">check internet</button>
+      </div>
+    </div>
+    <div class="card">
       <h3>Admin password (all Pis)</h3>
       <form id="pwForm" class="row wrap">
         <label>current <input id="pwCur" type="password" autocomplete="current-password" required></label>
@@ -191,6 +211,13 @@
         <button id="updCancel" class="ghost">stop rollout</button>
       </div>
       <p id="ghMsg" class="sub"></p>
+      <h4>System packages (Raspberry Pi OS)</h4>
+      <div class="row wrap">
+        <button id="aptSelf" class="ghost">update packages on this Pi</button>
+        <button id="aptAll">update packages on all Pis</button>
+        <label class="chk"><input id="aptForce" type="checkbox"> also during live music</label>
+      </div>
+      <p id="aptMsg" class="sub"></p>
       <p class="hint">How it works: a Pi with internet (Ethernet, phone hotspot at home…) fetches the new version from
         GitHub; then <b>roll out</b> copies it inside the offline cluster to all other Pis, one after the other
         (leader last). Each Pi checks the download, installs, restarts its services (~10 s, the CRT keeps showing its

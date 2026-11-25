@@ -66,7 +66,8 @@ The installer (idempotent; re-run it any time):
 8. `configure-robustness.sh`: hardware watchdog, journal/Chromium in RAM, no swap
    (`--readonly` for a read-only root file system)
 
-Options: `--no-network` (external network mode), `--no-crt`, `--no-kiosk`, `--firewall`,
+Options: `--network hotspot|wlan|ethernet` (see network-modes.md; `--wlan-ssid`, `--wlan-psk-file`
+for an existing Wi-Fi), `--no-network` (never touch networking, configure it yourself), `--no-crt`, `--no-kiosk`, `--firewall`,
 `--disable-other-wifi` (recommended if the Pi has a home Wi-Fi profile with autoconnect),
 `--norm NTSC`, `--priority N`.
 

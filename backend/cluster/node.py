@@ -134,6 +134,7 @@ class ClusterNode:
         self.admin: dict = {"hash": cfg.secrets.admin_password_hash, "ver": [0, self.id]}
         self.cal_history: list[dict] = []            # replicated calibration history (newest last, max 50)
         self.extra: dict = {}                         # replicated leader-owned state (update rollout)
+        self.internet: bool | None = None             # this Pi reaches the package mirror
 
     # ================================================================ helpers
     def _on_transition(self, tr: Transition) -> None:
@@ -473,6 +474,10 @@ class ClusterNode:
             if self.is_leader():
                 self._cal_tap(float(m["cluster"]), int(m.get("value", 1)), local)
             return
+        if t == "apt_cmd":
+            if self.on_apt_message:
+                self.on_apt_message(m, local)
+            return
         if t in ("update_cmd", "update_rollback"):
             if self.on_update_message:
                 self.on_update_message(m, local)
@@ -488,6 +493,9 @@ class ClusterNode:
     on_wifi_country: Callable[[str], bool] | None = None
     on_update_message: Callable[[dict, float], None] | None = None
     on_log_lines: Callable[[str, list], None] | None = None
+    on_apt_message: Callable[[dict, float], None] | None = None
+    apt_job: dict | None = None          # this Pi's package update status (set by the core)
+    net_failed_rev: int = 0
     on_cal_history: Callable[[list], None] | None = None
     applied_country: str | None = None
 
@@ -580,7 +588,8 @@ class ClusterNode:
         res = fn(args, local)
         self._broadcast_state(local)
         self.dirty = True
-        self._log("info", f"command {name} {args if len(str(args)) < 200 else ''} by {origin or 'local'}")
+        shown = "" if name in SENSITIVE_COMMANDS or len(str(args)) >= 200 else args
+        self._log("info", f"command {name} {shown} by {origin or 'local'}")
         return res or {"ok": True}
 
     def _bump_timeline(self, tl: Timeline) -> None:
@@ -676,6 +685,8 @@ class ClusterNode:
                 raise CommandError(f"unknown section {section}")
             if section == "calibration" and "offsets_ms" in values:
                 raise CommandError("use calibration commands to change offsets")
+            if section == "site" and any(k.startswith("net_") for k in values):
+                raise CommandError("use the network mode function to change the network")
             merged[section].update(values)
         try:
             new = SharedConfig.model_validate(merged)
@@ -718,6 +729,25 @@ class ClusterNode:
         self.dirty = True
         self._log("warning", "admin password changed (all sessions on all Pis logged out)")
         return {"ok": True}
+
+    def _cmd_set_network_mode(self, a: dict, local: float) -> dict:
+        mode = a.get("mode")
+        if mode not in ("hotspot", "wlan", "ethernet"):
+            raise CommandError("mode must be hotspot, wlan or ethernet")
+        ssid = str(a.get("wlan_ssid") or "")
+        if mode == "wlan" and not ssid:
+            raise CommandError("Wi-Fi name (SSID) required")
+        site = self.shared.site.model_copy(update={
+            "net_mode": mode, "net_wlan_ssid": ssid, "net_wlan_psk_sealed": str(a.get("wlan_psk_sealed") or ""),
+            "net_rev": self.shared.site.net_rev + 1})
+        self._set_shared(self.shared.model_copy(update={"site": site}), local, f"network mode -> {mode}")
+        return {"net_rev": site.net_rev, "applies_in_s": 15}
+
+    def _cmd_cancel_network_mode(self, a: dict, local: float) -> dict:
+        site = self.shared.site.model_copy(update={"net_mode": None, "net_wlan_psk_sealed": ""})
+        self._set_shared(self.shared.model_copy(update={"site": site}), local,
+                         f"network mode change cancelled (failed on {a.get('reason', '?')})")
+        return {"cancelled": True}
 
     def _cmd_set_wall_time(self, a: dict, local: float) -> dict:
         wall = float(a["unix"])
@@ -891,6 +921,10 @@ class ClusterNode:
             "scene": seg.scene if seg else None,
             "visual_offset_ms": self.visual_offset_ms(),
             "wifi_country": self.applied_country,
+            "net_mode": self.cfg.network.mode,
+            "net_failed_rev": self.net_failed_rev,
+            "internet": self.internet,
+            "apt": self.apt_job,
             "version": self.version,
             "alerts": self.alerts(local),
             "audio": {"has_device": self.has_audio, "live": bool(la.get("live")), "bpm": la.get("bpm"),
@@ -987,7 +1021,8 @@ class ClusterNode:
         self.dirty = False
 
 
-LEADER_COMMANDS = {"set_admin_hash", "set_bpm", "tap", "nudge", "downbeat", "manual", "scene", "clear_scene", "set_shared",
+SENSITIVE_COMMANDS = {"set_admin_hash", "set_network_mode"}
+LEADER_COMMANDS = {"set_admin_hash", "set_network_mode", "cancel_network_mode", "set_bpm", "tap", "nudge", "downbeat", "manual", "scene", "clear_scene", "set_shared",
                    "import_shared", "handover", "set_wall_time", "restart", "cal_start", "cal_tap", "cal_adjust",
                    "cal_save", "cal_cancel", "cal_reset", "cal_select"}
 LOCAL_COMMANDS = {"key_tap", "renderer_report"}

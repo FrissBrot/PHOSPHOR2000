@@ -20,6 +20,8 @@
 #   --no-kiosk             do not install the Chromium kiosk
 #   --firewall             restrict ports 8080/47800 to the cluster subnet (nftables table)
 #   --disable-other-wifi   set autoconnect=no on other Wi-Fi profiles
+#   --network MODE         hotspot (default) | wlan | ethernet  (changeable later in the dashboard)
+#   --wlan-ssid SSID --wlan-psk-file FILE   existing Wi-Fi for --network wlan
 #   --readonly             read-only root file system (RAM overlay) — maximal power-cut safety;
 #                          hardware watchdog + write-minimised system are always configured
 # Re-running is safe (idempotent); every modified system file is backed up first.
@@ -28,7 +30,7 @@
 SRC=$(cd "$(dirname "$0")/.." && pwd)
 
 NODE_ID="" PRIORITY="" COUNTRY="" SECRETS="" NORM=PAL
-DO_NET=1 DO_CRT=1 DO_KIOSK=1 FIREWALL=0 OTHERWIFI="" READONLY=0
+DO_NET=1 DO_CRT=1 DO_KIOSK=1 FIREWALL=0 OTHERWIFI="" READONLY=0 NETMODE="" WLAN_SSID="" WLAN_PSK_FILE=""
 GEN=""
 while [ $# -gt 0 ]; do
   case $1 in
@@ -44,6 +46,9 @@ while [ $# -gt 0 ]; do
     --firewall) FIREWALL=1 ;;
     --disable-other-wifi) OTHERWIFI=--disable-other-wifi ;;
     --readonly) READONLY=1 ;;
+    --network) NETMODE=$2; shift ;;
+    --wlan-ssid) WLAN_SSID=$2; shift ;;
+    --wlan-psk-file) WLAN_PSK_FILE=$2; shift ;;
     -h|--help) sed -n '2,26p' "$0"; exit 0 ;;
     *) die "unknown option $1" ;;
   esac
@@ -86,7 +91,7 @@ case $(pi_model) in *"Raspberry Pi 3"*) ;; *) c_warn "model '$(pi_model)' is not
 
 c_info "1/9 packages"
 run apt-get update
-run apt-get install -y --no-install-recommends python3 python3-venv python3-numpy libportaudio2 \
+run apt-get install -y --no-install-recommends python3 python3-venv python3-numpy libportaudio2 avahi-daemon avahi-utils \
   network-manager dnsmasq-base rfkill iw alsa-utils curl rsync nftables sqlite3
 
 c_info "2/9 user and directories"
@@ -182,7 +187,8 @@ if [ "$FIREWALL" = 1 ]; then run systemctl enable --now phosphor-firewall.servic
 
 c_info "6/9 network"
 if [ "$DO_NET" = 1 ]; then
-  PHOS_PYTHON="$PHOS_PREFIX/venv/bin/python" "$PHOS_PREFIX/scripts/configure-network.sh" ${COUNTRY:+--country "$COUNTRY"} $OTHERWIFI
+  PHOS_PYTHON="$PHOS_PREFIX/venv/bin/python" "$PHOS_PREFIX/scripts/configure-network.sh" ${COUNTRY:+--country "$COUNTRY"} $OTHERWIFI \
+    ${NETMODE:+--mode "$NETMODE"} ${WLAN_SSID:+--wlan-ssid "$WLAN_SSID"} ${WLAN_PSK_FILE:+--wlan-psk-file "$WLAN_PSK_FILE"}
 else
   c_info "skipped (external network mode)"
 fi
