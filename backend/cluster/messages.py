@@ -34,6 +34,8 @@ class Codec:
     boot: str = field(default_factory=lambda: os.urandom(6).hex())
     _seq: int = 0
     _last_seen: dict[tuple[str, str], int] = field(default_factory=dict)
+    _window: dict[tuple[str, str], set] = field(default_factory=dict)
+    WINDOW = 256   # sliding replay window: reordered datagrams are fine, duplicates/old ones are not
 
     def encode(self, msg: dict) -> bytes:
         self._seq += 1
@@ -67,12 +69,20 @@ class Codec:
         if sender == self.node_id and boot == self.boot:
             raise CodecError("own message")
         key = (sender, boot)
-        if seq <= self._last_seen.get(key, 0):
+        top = self._last_seen.get(key, 0)
+        seen = self._window.setdefault(key, set())
+        if seq <= top - self.WINDOW or seq in seen:
             raise CodecError("replay")
-        self._last_seen[key] = seq
+        seen.add(seq)
+        if seq > top:
+            self._last_seen[key] = seq
+            if len(seen) > 2 * self.WINDOW:
+                floor = seq - self.WINDOW
+                self._window[key] = {s for s in seen if s > floor}
         if len(self._last_seen) > 256:  # forget stale boots
             for k in list(self._last_seen)[:128]:
                 del self._last_seen[k]
+                self._window.pop(k, None)
         return body
 
 

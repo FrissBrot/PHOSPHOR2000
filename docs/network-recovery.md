@@ -109,6 +109,23 @@ Two APs with the same SSID cannot see each other's beacons on IP level. Detectio
 * Wall-clock version stamps rely on roughly correct clocks; without an RTC set the cluster clock
   from the admin dashboard after a cold start.
 
+## What the dashboard keeps across a leader change
+
+`http://192.168.50.1:8080/admin/` always reaches the current leader (every leader serves the AP
+as 192.168.50.1). It is unreachable during the switch (20–45 s) and reconnects by itself; phones
+may need "stay connected" for a Wi-Fi without internet. Replicated to every Pi, so the new leader
+has it immediately:
+
+* settings, scene programme, offsets, Wi-Fi country, update policy, timeline
+* the **admin password** (last-writer-wins version, merged after partitions) and the **login**:
+  session cookies are signed with a key derived from the cluster key and the password version,
+  so a login is valid on every Pi and a password change logs out everybody everywhere
+* the **calibration history** (last 50, union of all Pis) and a **running calibration session**
+  including its taps
+* a running **software rollout** (the new leader continues it)
+* the **event log**: every Pi broadcasts its log lines, every Pi keeps the whole cluster's log
+  in RAM since its own start
+
 ## Controlled failover
 
 Admin → Cluster → *make leader* on a healthy follower. The leader announces `handover`, waits

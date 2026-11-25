@@ -13,7 +13,7 @@
 #   --priority N           override priority
 #   --country CC           initial Wi-Fi regulatory country (Pi OS blocks Wi-Fi until one is set);
 #                          later changes: admin dashboard -> Config -> Wi-Fi country
-#   --secrets FILE         cluster secrets (wifi_psk, cluster_key); admin password asked if unset
+#   --secrets FILE         cluster secrets (wifi_psk, cluster_key, admin_password_hash)
 #   --norm PAL|NTSC        composite norm (default PAL)
 #   --no-network           do not configure NetworkManager (manage: false = external network mode)
 #   --no-crt               do not touch config.txt/cmdline.txt
@@ -57,6 +57,21 @@ if [ -n "$GEN" ]; then
   key=$(python3 -c 'import secrets;print(secrets.token_hex(32))')
   printf 'wifi_psk: "%s"\ncluster_key: "%s"\n' "$psk" "$key" > "$GEN"
   chmod 600 "$GEN"
+  # one admin password for the whole cluster (can be changed later in the dashboard)
+  if [ -t 0 ]; then
+    hash=$(python3 - <<'PY'
+import base64, getpass, hashlib, os, sys
+pw = getpass.getpass("admin dashboard password for ALL Pis (min. 8 chars): ")
+if len(pw) < 8 or pw != getpass.getpass("repeat: "):
+    sys.exit("passwords too short or different")
+salt = os.urandom(16)
+h = hashlib.scrypt(pw.encode(), salt=salt, n=2**14, r=8, p=1, dklen=32)
+b = lambda x: base64.urlsafe_b64encode(x).decode().rstrip("=")
+print(f"scrypt${2**14}$8$1${b(salt)}${b(h)}")
+PY
+) || die "no admin password set"
+    printf 'admin_password_hash: "%s"\n' "$hash" >> "$GEN"
+  fi
   c_ok "wrote $GEN (Wi-Fi password: $psk). Copy it to every Pi; keep it private."
   exit 0
 fi
@@ -130,7 +145,7 @@ import sys, yaml
 from pathlib import Path
 src = yaml.safe_load(Path(sys.argv[1]).read_text()) or {}
 from backend.api.auth import update_secrets
-vals = {k: str(src[k]) for k in ("wifi_psk", "cluster_key") if src.get(k)}
+vals = {k: str(src[k]) for k in ("wifi_psk", "cluster_key", "admin_password_hash") if src.get(k)}
 update_secrets(Path(sys.argv[2]), **vals)
 PY
   chown phosphor:phosphor "$SECF"

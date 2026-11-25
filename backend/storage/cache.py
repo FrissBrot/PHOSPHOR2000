@@ -94,8 +94,21 @@ class EventLog:
         self.cal_db.execute("PRAGMA synchronous=FULL")
         self.cal_db.execute("CREATE TABLE IF NOT EXISTS calibrations (id INTEGER PRIMARY KEY, wall REAL, node TEXT,"
                             " offset_ms REAL, detail TEXT)")
+        cols = {r[1] for r in self.cal_db.execute("PRAGMA table_info(calibrations)")}
+        if "uid" not in cols:   # migration from the per-Pi history
+            self.cal_db.execute("ALTER TABLE calibrations ADD COLUMN uid TEXT")
+            self.cal_db.execute("ALTER TABLE calibrations ADD COLUMN by_node TEXT")
+        self.cal_db.execute("CREATE UNIQUE INDEX IF NOT EXISTS cal_uid ON calibrations(uid)")
         self.lock = threading.Lock()
         self.n = 0
+
+    def add_remote(self, node: str, lines: list) -> None:
+        """Log lines broadcast by another Pi: every Pi keeps the whole cluster's log (since its boot)."""
+        for ln in lines[:100]:
+            try:
+                self.add(float(ln["wall"]), node, str(ln["level"])[:10], str(ln["msg"]))
+            except (KeyError, TypeError, ValueError):
+                continue
 
     def add(self, wall: float, node: str, level: str, msg: str) -> None:
         with self.lock:
@@ -104,18 +117,33 @@ class EventLog:
             if self.n % 200 == 0:
                 self.db.execute("DELETE FROM events WHERE id <= (SELECT MAX(id) FROM events) - ?", (self.MAX_ROWS,))
 
-    def add_calibration(self, wall: float, node: str, offset_ms: float, detail: dict) -> None:
+    def add_calibration(self, wall: float, node: str, offset_ms: float, detail: dict,
+                        uid: str | None = None, by: str | None = None) -> None:
         with self.lock:
-            self.cal_db.execute("INSERT INTO calibrations (wall, node, offset_ms, detail) VALUES (?,?,?,?)",
-                            (wall, node, offset_ms, json.dumps(detail)[:4000]))
+            self.cal_db.execute("INSERT OR IGNORE INTO calibrations (wall, node, offset_ms, detail, uid, by_node)"
+                                " VALUES (?,?,?,?,?,?)",
+                                (wall, node, offset_ms, json.dumps(detail)[:4000], uid or f"{int(wall * 1000)}-{node}", by))
+
+    def add_calibration_entries(self, entries: list[dict]) -> None:
+        for e in entries:
+            self.add_calibration(float(e["wall"]), str(e["node"]), float(e["offset_ms"]), e.get("detail") or {},
+                                 str(e["id"]), e.get("by"))
+
+    def calibration_entries(self, n: int = 50) -> list[dict]:
+        with self.lock:
+            rows = self.cal_db.execute("SELECT wall, node, offset_ms, detail, uid, by_node FROM calibrations"
+                                       " ORDER BY wall DESC LIMIT ?", (n,)).fetchall()
+        return [{"id": r[4] or f"{int(r[0] * 1000)}-{r[1]}", "wall": r[0], "node": r[1], "offset_ms": r[2],
+                 "detail": json.loads(r[3]), "by": r[5]} for r in reversed(rows)]
 
     def recent(self, n: int = 200) -> list[dict]:
         with self.lock:
-            rows = self.db.execute("SELECT wall, node, level, msg FROM events ORDER BY id DESC LIMIT ?", (n,)).fetchall()
+            rows = self.db.execute("SELECT wall, node, level, msg FROM events ORDER BY wall DESC, id DESC LIMIT ?",
+                                   (n,)).fetchall()
         return [{"wall": r[0], "node": r[1], "level": r[2], "msg": r[3]} for r in reversed(rows)]
 
     def calibrations(self, n: int = 50) -> list[dict]:
         with self.lock:
-            rows = self.cal_db.execute("SELECT wall, node, offset_ms, detail FROM calibrations ORDER BY id DESC LIMIT ?",
-                                   (n,)).fetchall()
-        return [{"wall": r[0], "node": r[1], "offset_ms": r[2], "detail": json.loads(r[3])} for r in rows]
+            rows = self.cal_db.execute("SELECT wall, node, offset_ms, detail, by_node FROM calibrations"
+                                       " ORDER BY wall DESC LIMIT ?", (n,)).fetchall()
+        return [{"wall": r[0], "node": r[1], "offset_ms": r[2], "detail": json.loads(r[3]), "by": r[4]} for r in rows]

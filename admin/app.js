@@ -346,6 +346,16 @@ $("#importFile").addEventListener("change", async (ev) => {
   } catch (e) { $("#cfgMsg").textContent = "import failed"; }
   ev.target.value = "";
 });
+$("#pwForm").addEventListener("submit", async (ev) => {
+  ev.preventDefault();
+  if ($("#pwNew").value !== $("#pwNew2").value) { toast("new passwords differ"); return; }
+  try {
+    await api("/api/admin/password", { current: $("#pwCur").value, new: $("#pwNew").value });
+    ["#pwCur", "#pwNew", "#pwNew2"].forEach((id) => ($(id).value = ""));
+    toast("password changed on all Pis - please log in again", true);
+    setTimeout(() => location.reload(), 1500);
+  } catch (e) {}
+});
 $("#setTime").addEventListener("click", () => confirm(`Set cluster clock to ${new Date().toString()}?`) && cmd("set_wall_time", { unix: Date.now() / 1000 }));
 
 // ---------------------------------------------------------------- updates
@@ -395,9 +405,9 @@ async function loadLogs() {
     const d = await api("/api/logs?n=300", undefined, "GET");
     $("#events").textContent = d.events.map((e) => `${new Date(e.wall * 1000).toLocaleTimeString()} ${e.node} ${e.level.toUpperCase()} ${e.msg}`).join("\n");
     const t = $("#calHist"); t.innerHTML = "";
-    t.append(el("tr", {}, el("th", {}, "time"), el("th", {}, "CRT"), el("th", {}, "offset"), el("th", {}, "taps"), el("th", {}, "SD"), el("th", {}, "SE")));
+    t.append(el("tr", {}, el("th", {}, "time"), el("th", {}, "CRT"), el("th", {}, "offset"), el("th", {}, "taps"), el("th", {}, "SD"), el("th", {}, "SE"), el("th", {}, "saved on")));
     for (const c of d.calibrations) t.append(el("tr", {}, el("td", {}, new Date(c.wall * 1000).toLocaleString()), el("td", {}, c.node),
-      el("td", {}, fmt(c.offset_ms, 1)), el("td", {}, c.detail.n_used ?? "–"), el("td", {}, fmt(c.detail.circ_std_ms, 1)), el("td", {}, fmt(c.detail.std_err_ms, 1))));
+      el("td", {}, fmt(c.offset_ms, 1)), el("td", {}, c.detail.n_used ?? "–"), el("td", {}, fmt(c.detail.circ_std_ms, 1)), el("td", {}, fmt(c.detail.std_err_ms, 1)), el("td", {}, c.by || "–")));
   } catch (e) {}
 }
 

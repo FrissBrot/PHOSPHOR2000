@@ -26,8 +26,9 @@ git clone https://github.com/FrissBrot/PHOSPHOR2000.git && cd PHOSPHOR2000
 scripts/install.sh --generate-secrets cluster-secrets.yaml
 ```
 
-This prints the Wi-Fi password for `PHOSPHOR2000` and writes `cluster-secrets.yaml`
-(WPA2 passphrase + 256-bit cluster key used to authenticate all node traffic). Copy the file to
+This asks for the **admin dashboard password (one for all Pis)**, prints the Wi-Fi password for
+`PHOSPHOR2000` and writes `cluster-secrets.yaml` (WPA2 passphrase, 256-bit cluster key used to
+authenticate all node traffic, admin password hash). Copy the file to
 every Pi (scp / USB stick) and keep it private. All Pis **must** use the same file.
 
 ## 3. Install on every Pi
@@ -40,6 +41,10 @@ sudo scripts/install.sh --node-id pi-01 --country DE --secrets ~/cluster-secrets
 Use `pi-01` for the Pi you most want as leader (priority 100), then `pi-02` (90) … `pi-05` (60).
 The Pi with the USB audio interface **automatically becomes the leader** (master), whatever its
 id; see network-recovery.md.
+The admin password comes from `cluster-secrets.yaml`; change it later in the dashboard
+(Config → Admin password) — the change is replicated to every Pi. `sudo phosphor-passwd` on a Pi
+also works and is taken over by the whole cluster.
+
 `--country` is the initial Wi-Fi regulatory domain (2 letters, e.g. `CH`): Pi OS keeps Wi-Fi
 blocked until one is set, so it is needed once at install. Later changes: dashboard → Config →
 *Wi-Fi country* → applied on all Pis immediately and kept after reboot. You are asked for the admin dashboard

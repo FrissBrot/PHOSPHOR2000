@@ -14,8 +14,8 @@ from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import ValidationError
 
-from backend.api.auth import COOKIE, CSRF_HEADER, RateLimiter, Sessions, verify_password
-from backend.api.models import COMMANDS, Login
+from backend.api.auth import COOKIE, CSRF_HEADER, RateLimiter, Sessions, hash_password, verify_password
+from backend.api.models import COMMANDS, Login, PasswordChange
 from backend.cluster.node import CommandError
 from backend.config import REPO_ROOT, SharedConfig
 
@@ -39,10 +39,14 @@ SECURITY_HEADERS = {
 
 def create_app(core: "Core") -> FastAPI:
     app = FastAPI(title="PHOSPHOR2000", docs_url=None, redoc_url=None, openapi_url=None)
-    sessions = Sessions(core.cfg.secrets.session_secret)
-    limiter = RateLimiter()
-    pw_hash = core.cfg.secrets.admin_password_hash
     node = core.node
+    # one login for the whole cluster: key from cluster key + current password version
+    sessions = Sessions(core.cfg.secrets.session_secret,
+                        key_material=node.admin_key_material if core.cfg.secrets.cluster_key else None)
+    limiter = RateLimiter()
+
+    def pw_hash() -> str:
+        return node.admin.get("hash") or ""
 
     @app.middleware("http")
     async def headers(request: Request, call_next):
@@ -83,14 +87,32 @@ def create_app(core: "Core") -> FastAPI:
         ip = request.client.host if request.client else "?"
         if not limiter.allow(ip) or not limiter.allow("*global*"):
             raise HTTPException(429, "too many attempts, wait a minute")
-        if not pw_hash:
+        if not pw_hash():
             raise HTTPException(503, "no admin password configured: run `sudo phosphor-passwd` on the Pi")
-        ok = await asyncio.get_running_loop().run_in_executor(None, verify_password, body.password, pw_hash)
+        ok = await asyncio.get_running_loop().run_in_executor(None, verify_password, body.password, pw_hash())
         if not ok:
             node._log("warning", f"failed admin login from {ip}")
             raise HTTPException(401, "wrong password")
         response.set_cookie(COOKIE, sessions.issue(), httponly=True, samesite="strict", max_age=12 * 3600, path="/")
         return {"ok": True}
+
+    @app.post("/api/admin/password")
+    async def change_password(body: PasswordChange, request: Request):
+        """Cluster-wide password change: hashed here, replicated by the leader, all sessions end."""
+        require(request, mutating=True)
+        loop = asyncio.get_running_loop()
+        if not await loop.run_in_executor(None, verify_password, body.current, pw_hash()):
+            raise HTTPException(403, "current password is wrong")
+        try:
+            h = await loop.run_in_executor(None, hash_password, body.new)
+        except ValueError as exc:
+            raise HTTPException(422, str(exc))
+        try:
+            res = node.command("set_admin_hash", {"hash": h}, time.monotonic(), origin="admin")
+        except CommandError as exc:
+            raise HTTPException(409, str(exc))
+        core.persist()
+        return {"ok": True, **res}
 
     @app.post("/api/logout")
     async def logout(request: Request, response: Response):
@@ -100,7 +122,7 @@ def create_app(core: "Core") -> FastAPI:
 
     @app.get("/api/session")
     async def session(request: Request):
-        return {"authenticated": authed(request), "password_configured": bool(pw_hash), "node": node.id}
+        return {"authenticated": authed(request), "password_configured": bool(pw_hash()), "node": node.id}
 
     # -------------------------------------------------------------- status
     def cluster_view(now: float) -> dict:
@@ -168,9 +190,6 @@ def create_app(core: "Core") -> FastAPI:
             res = node.command(name, args, time.monotonic(), origin="admin")
         except CommandError as exc:
             raise HTTPException(409, str(exc))
-        if name == "cal_save" and node.is_leader():
-            for nid, val in (res.get("saved") or {}).items():
-                core.events.add_calibration(time.time(), nid, val, node.cal.result or {})
         core.persist()
         return res
 

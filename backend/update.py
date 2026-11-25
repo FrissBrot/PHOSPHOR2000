@@ -54,7 +54,6 @@ class Updater:
         self.run_dir = run_dir
         self.key = hashlib.sha256(b"phos-update|" + core.cfg.secrets.cluster_key.encode()).digest()
         self.github: dict = {}
-        self.rollout: dict | None = None
         self.last_live = time.monotonic()
         self.next_auto = 0.0
         self.next_github = 0.0
@@ -64,6 +63,16 @@ class Updater:
         self.start_unit = None                               # injectable: callable() -> bool
 
     # ------------------------------------------------------------ basics
+    @property
+    def rollout(self) -> dict | None:
+        """Replicated to all Pis with the leader state, so a new leader continues a rollout.
+        All times inside are cluster times (comparable on every Pi)."""
+        return self.node.extra.get("rollout")
+
+    @rollout.setter
+    def rollout(self, value: dict | None) -> None:
+        self.node.extra["rollout"] = value
+
     @property
     def version(self) -> str:
         return self.node.version
@@ -261,6 +270,7 @@ class Updater:
             r.update(state="failed", message="lost leadership during rollout")
             return
         vers = self.versions(now)
+        c = self.node.cluster_now(now)
         cur = r["current"]
         if cur is not None:
             peer = self.node.election.peers.get(cur)
@@ -269,19 +279,19 @@ class Updater:
                 r["current"] = None
                 r["message"] = f"{cur} updated"
                 cur = None
-            elif now - r["current_since"] > STEP_TIMEOUT:
+            elif c - r["current_since"] > STEP_TIMEOUT:
                 r.update(state="failed", message=f"{cur} did not come back with {r['target']} within "
                                                  f"{STEP_TIMEOUT / 60:.0f} min; rollout stopped")
                 self.node._log("error", r["message"])
                 return
-            elif now - r["last_sent"] > RESEND:
+            elif c - r["last_sent"] > RESEND:
                 self._send_cmd(cur, now)
                 return
             else:
                 return
         if r["queue"]:
             nxt = r["queue"].pop(0)
-            r.update(current=nxt, current_since=now, message=f"updating {nxt}")
+            r.update(current=nxt, current_since=c, message=f"updating {nxt}")
             self._send_cmd(nxt, now)
             return
         if r["leader_last"]:
@@ -297,7 +307,7 @@ class Updater:
     def _send_cmd(self, nid: str, now: float) -> None:
         r = self.rollout
         assert r is not None
-        r["last_sent"] = now
+        r["last_sent"] = self.node.cluster_now(now)
         self.node.send({"t": "update_cmd", "to": nid, "source": r["source"], "path": r["path"],
                         "sha256": r["sha256"], "version": r["target"]}, nid)
 

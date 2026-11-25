@@ -166,6 +166,17 @@
         <span class="hint">regulatory domain for the PHOSPHOR2000 hotspot; applied immediately and kept after reboot</span></div>
       <p id="cfgMsg" class="msg"></p>
     </div>
+    <div class="card">
+      <h3>Admin password (all Pis)</h3>
+      <form id="pwForm" class="row wrap">
+        <label>current <input id="pwCur" type="password" autocomplete="current-password" required></label>
+        <label>new <input id="pwNew" type="password" autocomplete="new-password" minlength="8" required></label>
+        <label>repeat <input id="pwNew2" type="password" autocomplete="new-password" minlength="8" required></label>
+        <button type="submit">change for all Pis</button>
+      </form>
+      <p class="hint">Applies to every Pi in the cluster and logs everybody out. One login is valid on all Pis,
+        so the dashboard stays logged in when the master changes.</p>
+    </div>
   </section>
 
   <section data-panel="system" class="panel hidden">

@@ -50,10 +50,26 @@ def verify_password(pw: str, stored: str) -> bool:
 
 
 class Sessions:
-    def __init__(self, secret: str) -> None:
-        # Without a configured secret, sessions survive only until restart (random key).
-        self.key = hashlib.sha256((secret or secrets.token_hex(32)).encode() + b"|phos-session").digest()
+    """HMAC-signed session cookies.
+
+    The key is derived from the *cluster key* and the version of the cluster-wide admin password,
+    so a login is valid on every Pi (the dashboard keeps working after a leader change) and every
+    password change logs everybody out on all Pis. ``key_material`` is a callable so the key
+    follows password changes at runtime.
+    """
+
+    def __init__(self, secret: str | None = None, key_material=None) -> None:
+        fallback = secret or secrets.token_hex(32)   # no cluster key: sessions die with the process
+        self._material = key_material or (lambda: fallback)
+        self._cache: tuple[str, bytes] | None = None
         self.revoked: dict[str, float] = {}
+
+    @property
+    def key(self) -> bytes:
+        m = self._material()
+        if self._cache is None or self._cache[0] != m:
+            self._cache = (m, hashlib.sha256(m.encode() + b"|phos-session").digest())
+        return self._cache[1]
 
     def issue(self, user: str = "admin") -> str:
         body = _b64(json.dumps({"u": user, "exp": int(time.time()) + SESSION_TTL,
@@ -114,9 +130,29 @@ def update_secrets(path: Path, **values: str) -> None:
     os.replace(tmp, path)
 
 
+HASH_RE = r"^scrypt\$\d+\$\d+\$\d+\$[A-Za-z0-9_-]+\$[A-Za-z0-9_-]+$"
+
+
+def write_admin_override(state_dir: Path, h: str) -> None:
+    """Newest password set on this Pi by the CLI; the core picks it up and replicates it."""
+    import pwd
+    state_dir.mkdir(parents=True, exist_ok=True)
+    p = state_dir / "admin.json"
+    tmp = p.with_name("admin.json.tmp")
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w") as f:
+        json.dump({"hash": h, "ver": [int(time.time() * 1000), "cli"]}, f)
+    try:
+        u = pwd.getpwnam("phosphor")
+        os.chown(tmp, u.pw_uid, u.pw_gid)
+    except (KeyError, PermissionError):
+        pass
+    os.replace(tmp, p)
+
+
 def passwd_main() -> None:
-    """`phosphor-passwd`: set the admin password (writes the hash to secrets.yaml)."""
-    from backend.config import ETC_DIR
+    """`phosphor-passwd`: set the admin password (secrets.yaml + cluster-wide via the core)."""
+    from backend.config import ETC_DIR, STATE_DIR
     path = Path(sys.argv[1]) if len(sys.argv) > 1 else ETC_DIR / "secrets.yaml"
     pw = os.environ.get("PHOSPHOR_ADMIN_PASSWORD") or getpass.getpass("new admin password: ")
     if not os.environ.get("PHOSPHOR_ADMIN_PASSWORD") and pw != getpass.getpass("repeat: "):
@@ -126,4 +162,9 @@ def passwd_main() -> None:
     except ValueError as exc:
         sys.exit(str(exc))
     update_secrets(path, admin_password_hash=h)
-    print(f"admin password updated in {path}")
+    if os.environ.get("PHOSPHOR_PASSWD_NO_REPLICATE") != "1":
+        try:
+            write_admin_override(STATE_DIR, h)
+        except OSError:
+            pass
+    print(f"admin password updated in {path} (all Pis take it over when this Pi is in the cluster)")

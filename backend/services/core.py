@@ -216,6 +216,16 @@ class Core:
         blob = self.cache.load()
         if blob:
             self.node.restore_cache(blob, self.boot, time.monotonic())
+        # cluster-wide (after the cache: newest versions win) log, calibration history and admin password
+        self.node.on_log_lines = self.events.add_remote
+        self.node.on_cal_history = self.events.add_calibration_entries
+        self.node._merge_cal_history(self.events.calibration_entries())
+        self._log_out: list[dict] = []
+        self._log_sent = 0.0
+        try:
+            self.node._merge_admin(json.loads((state_dir / "admin.json").read_text()), time.monotonic())
+        except (OSError, ValueError):
+            pass
 
     # ------------------------------------------------------------ transport
     def send(self, msg: dict, to: str | None) -> None:
@@ -383,11 +393,19 @@ class Core:
             log.error("cache write failed: %s", exc)
 
     def _flush_logs(self) -> None:
+        now = time.monotonic()
+        if self._log_out and now - self._log_sent >= 1.0 and self.node.election.connected():
+            batch, self._log_out = self._log_out[:40], self._log_out[40:]
+            self._log_sent = now
+            self.send({"t": "log", "lines": batch}, None)
+        if len(self._log_out) > 400:
+            del self._log_out[:-400]
         lines = self.node.log_lines
         if self._log_idx > len(lines):
             self._log_idx = 0
         for ln in lines[self._log_idx:]:
             self.events.add(ln["wall"], ln["node"], ln["level"], ln["msg"])
+            self._log_out.append({"wall": ln["wall"], "level": ln["level"], "msg": ln["msg"][:500]})
         self._log_idx = len(lines)
         if len(lines) > 400:
             del lines[:200]

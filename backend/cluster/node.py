@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import logging
 import math
+import re
 import random
 import time
 from dataclasses import dataclass, field, replace
@@ -35,6 +36,8 @@ AUDIO_STALE_S = 3.0
 FEATURES_STALE_S = 0.6
 STATE_INTERVAL = 2.0
 STATUS_INTERVAL = 1.0
+CAL_HISTORY_MAX = 50
+HASH_RE = r"^scrypt\$\d+\$\d+\$\d+\$[A-Za-z0-9_-]+\$[A-Za-z0-9_-]+$"
 LIVE_DEADBAND_MS = 3.0
 LIVE_PHASE_GAIN = 0.35
 LIVE_TEMPO_GAIN = 0.5
@@ -55,7 +58,7 @@ class CalSession:
 
     def to_dict(self) -> dict:
         return {"active": self.active, "mode": self.mode, "target": self.target, "bpm": self.bpm,
-                "origin": self.origin, "tap_count": len(self.taps), "trial_offset_ms": self.trial_offset_ms,
+                "origin": self.origin, "tap_count": len(self.taps), "tap_times": [round(t, 5) for t in self.taps], "trial_offset_ms": self.trial_offset_ms,
                 "started_offset_ms": self.started_offset_ms, "result": self.result, "rev": self.rev}
 
     @classmethod
@@ -64,6 +67,7 @@ class CalSession:
             return cls()
         return cls(active=bool(d.get("active")), mode=d.get("mode", "single"), target=d.get("target"),
                    bpm=float(d.get("bpm", 120)), origin=float(d.get("origin", 0)),
+                   taps=[float(t) for t in (d.get("tap_times") or [])][-128:],
                    trial_offset_ms=d.get("trial_offset_ms"), started_offset_ms=float(d.get("started_offset_ms", 0)),
                    result=d.get("result"), rev=int(d.get("rev", 0)))
 
@@ -126,6 +130,10 @@ class ClusterNode:
         self.restored_from_cache = False
         self.version = "unknown"
         self.duplicate: dict | None = None            # another device claims our node id
+        # cluster-wide admin password (scrypt hash) with last-writer-wins version [wall_ms, origin]
+        self.admin: dict = {"hash": cfg.secrets.admin_password_hash, "ver": [0, self.id]}
+        self.cal_history: list[dict] = []            # replicated calibration history (newest last, max 50)
+        self.extra: dict = {}                         # replicated leader-owned state (update rollout)
 
     # ================================================================ helpers
     def _on_transition(self, tr: Transition) -> None:
@@ -277,11 +285,28 @@ class ClusterNode:
             "manual": self.manual,
             "cal": self.cal.to_dict(),
             "audio_src": self.audio_src,
+            "admin": self.admin,
+            "cal_history": self.cal_history[-CAL_HISTORY_MAX:],
+            "extra": self.extra,
         }
 
     def _broadcast_state(self, local: float) -> None:
         self.last_state_sent = local
-        self.send({"t": "state", **self.snapshot()}, None)
+        snap = self.snapshot()
+        # the calibration history is the biggest part: only when it changed, else every 30 s
+        # (keeps the 2-s state datagram to ~1 kB = one Wi-Fi frame)
+        # (sent with the next 3 broadcasts after a change, so a lost datagram does not matter)
+        hkey = (len(self.cal_history), self.cal_history[-1]["id"] if self.cal_history else None)
+        key, last, left = self._hist_sent
+        if hkey != key:
+            key, last, left = hkey, local, 3
+        if left > 0 or local - last >= 30.0:
+            self._hist_sent = (key, local, max(0, left - 1))
+        else:
+            snap.pop("cal_history")
+        self.send({"t": "state", **snap}, None)
+
+    _hist_sent: tuple = (None, -1e9, 0)
 
     def _apply_state(self, m: dict, local: float) -> None:
         el = self.election
@@ -324,14 +349,46 @@ class ClusterNode:
         self.wall_offset = float(m.get("wall_offset", self.wall_offset))
         self.manual = bool(m.get("manual", False))
         self.cal = CalSession.from_dict(m.get("cal"))
+        self.cal_filter = None            # rebuilt from the replicated taps if we become leader
         self.audio_src = m.get("audio_src")
+        self._merge_admin(m.get("admin"), local)
+        self._merge_cal_history(m.get("cal_history") or [])
+        self.extra = dict(m.get("extra") or {})
         if self.sync.synced:
             self.leader_epoch_applied = key
 
     def _report_offsets_to(self, leader: str) -> None:
         """After joining a (possibly different) leader, offer our calibration so newer entries survive merges."""
         self.send({"t": "offsets_report", "offsets": self.shared.calibration.offsets_ms,
-                   "versions": self.offset_versions}, leader)
+                   "versions": self.offset_versions, "admin": self.admin,
+                   "cal_history": self.cal_history[-CAL_HISTORY_MAX:]}, leader)
+
+    # ---- admin password (cluster-wide, last writer wins) ----
+    def _merge_admin(self, rec: dict | None, local: float) -> bool:
+        if not rec or not isinstance(rec.get("hash"), str) or not re.fullmatch(HASH_RE, rec["hash"]):
+            return False
+        ver = list(rec.get("ver") or [0, ""])
+        if ver > list(self.admin.get("ver") or [0, ""]):
+            self.admin = {"hash": rec["hash"], "ver": ver}
+            self.dirty = True
+            self._log("info", "admin password updated (cluster-wide)")
+            return True
+        return False
+
+    def admin_key_material(self) -> str:
+        """Session key material: cluster key + password version -> one login for every Pi."""
+        return f"{self.cfg.secrets.cluster_key}|{self.admin.get('ver')}|{self.admin.get('hash', '')[-16:]}"
+
+    # ---- calibration history (cluster-wide union) ----
+    def _merge_cal_history(self, entries: list) -> bool:
+        known = {e.get("id") for e in self.cal_history}
+        new = [e for e in entries if isinstance(e, dict) and e.get("id") and e["id"] not in known]
+        if not new:
+            return False
+        self.cal_history = sorted(self.cal_history + new, key=lambda e: (e.get("wall", 0), e["id"]))[-CAL_HISTORY_MAX:]
+        if self.on_cal_history:
+            self.on_cal_history(new)
+        return True
 
     def _merge_offsets(self, offsets: dict, versions: dict, local: float) -> None:
         changed = False
@@ -403,6 +460,14 @@ class ClusterNode:
         if t == "offsets_report":
             if self.is_leader():
                 self._merge_offsets(m.get("offsets", {}), m.get("versions", {}), local)
+                changed = self._merge_admin(m.get("admin"), local)
+                changed = self._merge_cal_history(m.get("cal_history") or []) or changed
+                if changed:
+                    self._broadcast_state(local)
+            return
+        if t == "log":
+            if self.on_log_lines:
+                self.on_log_lines(sender, m.get("lines") or [])
             return
         if t == "cal_tap":
             if self.is_leader():
@@ -422,6 +487,8 @@ class ClusterNode:
     now_fn: Callable[[], float] | None = None   # real runtime: time.monotonic (simulation: None)
     on_wifi_country: Callable[[str], bool] | None = None
     on_update_message: Callable[[dict, float], None] | None = None
+    on_log_lines: Callable[[str, list], None] | None = None
+    on_cal_history: Callable[[list], None] | None = None
     applied_country: str | None = None
 
     def _apply_site(self) -> None:
@@ -643,6 +710,15 @@ class ClusterNode:
             raise CommandError("handover target not reachable or not eligible")
         return {"handover_to": a["target"]}
 
+    def _cmd_set_admin_hash(self, a: dict, local: float) -> dict:
+        h = str(a["hash"])
+        if not re.fullmatch(HASH_RE, h):
+            raise CommandError("invalid password hash")
+        self.admin = {"hash": h, "ver": [int(self.wall_clock() * 1000), self.id]}
+        self.dirty = True
+        self._log("warning", "admin password changed (all sessions on all Pis logged out)")
+        return {"ok": True}
+
     def _cmd_set_wall_time(self, a: dict, local: float) -> dict:
         wall = float(a["unix"])
         if not 946684800 <= wall <= 4102444800:
@@ -682,6 +758,11 @@ class ClusterNode:
         return self.cal.to_dict()
 
     def _cal_tap(self, cluster_t: float, value: int, local: float) -> None:
+        if self.cal.active and self.cal.mode == "single" and self.cal_filter is None:
+            # session continues after a leader change: rebuild the filter from the replicated taps
+            self.cal_filter = TapFilter(60.0 / self.cal.bpm, self.shared.calibration.double_press_fraction)
+            self.cal_filter.accepted = list(self.cal.taps)
+            self.cal_filter.last = self.cal.taps[-1] if self.cal.taps else None
         if not self.cal.active or self.cal.mode != "single" or self.cal_filter is None:
             return
         if not self.cal_filter.offer(cluster_t, value):
@@ -737,6 +818,12 @@ class ClusterNode:
         self.cal.started_offset_ms = val
         self.cal.trial_offset_ms = val
         self.cal.rev += 1
+        r = self.cal.result or {}
+        wall = self.wall_clock()
+        self._merge_cal_history([{
+            "id": f"{int(wall * 1000)}-{nid}", "wall": wall, "node": nid, "offset_ms": val, "by": self.id,
+            "detail": {k: r.get(k) for k in ("n_used", "n_rejected", "mean_ms", "circ_std_ms", "std_err_ms", "confidence")},
+        }])
         return {"saved": {nid: val}}
 
     def _cmd_cal_cancel(self, a: dict, local: float) -> dict:
@@ -858,7 +945,8 @@ class ClusterNode:
                          "synced": self.sync.synced},
                 "epoch_seen": self.election.epoch_seen,
                 "peers": {k: {"priority": p.priority} for k, p in self.election.peers.items()},
-                "yield_count": self.election.yield_count}
+                "yield_count": self.election.yield_count,
+                "admin": self.admin, "cal_history": self.cal_history[-CAL_HISTORY_MAX:]}
 
     def restore_cache(self, blob: dict, boot_id: str, local: float) -> None:
         """Restore replicated state after a process restart or reboot."""
@@ -873,6 +961,8 @@ class ClusterNode:
             self._log("error", f"cache unusable, starting from defaults: {exc}")
             return
         self.election.epoch_seen = max(self.election.epoch_seen, int(blob.get("epoch_seen", 0)))
+        self._merge_admin(blob.get("admin"), local)
+        self._merge_cal_history(blob.get("cal_history") or [])
         self.manual = bool(snap.get("manual", False))
         same_boot = blob.get("boot_id") == boot_id
         if same_boot and blob.get("sync", {}).get("synced"):
@@ -897,7 +987,7 @@ class ClusterNode:
         self.dirty = False
 
 
-LEADER_COMMANDS = {"set_bpm", "tap", "nudge", "downbeat", "manual", "scene", "clear_scene", "set_shared",
+LEADER_COMMANDS = {"set_admin_hash", "set_bpm", "tap", "nudge", "downbeat", "manual", "scene", "clear_scene", "set_shared",
                    "import_shared", "handover", "set_wall_time", "restart", "cal_start", "cal_tap", "cal_adjust",
                    "cal_save", "cal_cancel", "cal_reset", "cal_select"}
 LOCAL_COMMANDS = {"key_tap", "renderer_report"}

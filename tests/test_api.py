@@ -210,3 +210,33 @@ def test_set_wifi_country_rejects_bad_codes():
     with pytest.raises(ValueError):
         set_wifi_country("C;H")
     assert set_wifi_country("CH", dry_run=True)
+
+
+def test_one_login_valid_on_every_pi_and_password_change(tmp_path):
+    from backend.api.auth import hash_password as hp
+    cores = []
+    for nid in ("pi-01", "pi-02"):
+        cfg = load_config(node_path=tmp_path / f"{nid}.yaml", secrets_path=tmp_path / "none.yaml",
+                          overrides={"node": {"id": nid},
+                                     "network": {"discovery_window": 0.2, "backoff_jitter": 0, "backoff_slot": 0.2},
+                                     "secrets": {"cluster_key": "c" * 32,
+                                                                       "admin_password_hash": hp("first-pass")}})
+        d = tmp_path / nid
+        cores.append(Core(cfg, adapter=ExternalNetworkAdapter(), state_dir=d, has_audio=False))
+    # same replicated admin record on both (as after joining the cluster)
+    cores[1].node.admin = dict(cores[0].node.admin)
+    a, b = TestClient(create_app(cores[0])), TestClient(create_app(cores[1]))
+    assert a.post("/api/login", json={"password": "first-pass"}).status_code == 200
+    b.cookies.update(a.cookies)                       # same browser, other Pi now answers 192.168.50.1
+    assert b.get("/api/status").status_code == 200    # still logged in after a leader change
+    # change password on pi-01 (it is leader in this test)
+    c0 = cores[0]
+    deadline = time.time() + 5
+    while not c0.node.is_leader() and time.time() < deadline:
+        c0.node.tick(time.monotonic()); time.sleep(0.05)
+    r = a.post("/api/admin/password", json={"current": "wrong", "new": "second-pass"}, headers={"X-PHOS": "1"})
+    assert r.status_code == 403
+    r = a.post("/api/admin/password", json={"current": "first-pass", "new": "second-pass"}, headers={"X-PHOS": "1"})
+    assert r.status_code == 200
+    assert a.get("/api/status").status_code == 401    # everybody logged out
+    assert a.post("/api/login", json={"password": "second-pass"}).status_code == 200

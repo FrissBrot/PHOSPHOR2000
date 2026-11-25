@@ -254,3 +254,54 @@ def test_handover_to_non_audio_node_is_refused_while_audio_node_online():
     h = w.handles["pi-02"]
     with pytest.raises(CommandError):
         h.node.command("handover", {"target": "pi-01"}, h.clock.local(w.now))
+
+
+def test_failover_keeps_password_history_calibration_session_and_rollout():
+    from backend.api.auth import hash_password
+    w = SimWorld(3, seed=61)
+    run_until(w, lambda: settled(w, "pi-01"), 200)
+    w.run_for(10)
+    h1 = w.handles["pi-01"]
+    loc = h1.clock.local(w.now)
+    new_hash = hash_password("party-2027!")
+    h1.node.command("set_admin_hash", {"hash": new_hash}, loc)
+    h1.node.command("cal_start", {"mode": "single", "target": "pi-03"}, loc)
+    h1.node.command("cal_adjust", {"offset_ms": -8}, loc)
+    h1.node.command("cal_save", {}, loc)
+    origin = h1.node.cal.origin
+    for k in range(10):                                   # session in progress: 10 taps
+        h1.node.command("cal_tap", {"cluster": origin + k * 0.5 + 0.02}, loc)
+    h1.node.extra["rollout"] = {"state": "running", "target": "20991231T2359-abcdef0", "queue": ["pi-02"],
+                                "current": None}
+    h1.node._broadcast_state(loc)
+    w.run_for(5)
+    w.crash("pi-01")
+    run_until(w, lambda: settled(w, "pi-02"), 200)
+    n2 = w.handles["pi-02"].node
+    assert n2.admin["hash"] == new_hash                    # same password on the new master
+    assert any(e["node"] == "pi-03" and e["offset_ms"] == -8 for e in n2.cal_history)
+    assert n2.cal.active and len(n2.cal.taps) == 10        # calibration session continues
+    loc2 = w.handles["pi-02"].clock.local(w.now)
+    for k in range(10, 16):
+        n2.command("cal_tap", {"cluster": origin + k * 0.5 + 0.02}, loc2)
+    assert len(n2.cal.taps) == 16 and n2.cal.result["mean_ms"] == pytest.approx(20, abs=2)
+    assert n2.extra["rollout"]["target"] == "20991231T2359-abcdef0"   # rollout state taken over
+    # same session key material on every Pi -> one login for the whole cluster
+    n3 = w.handles["pi-03"].node
+    assert n2.admin_key_material() == n3.admin_key_material()
+
+
+def test_password_changed_in_partition_is_merged_after_heal():
+    from backend.api.auth import hash_password
+    w = SimWorld(4, seed=62)
+    run_until(w, lambda: settled(w, "pi-01"), 200)
+    w.partition(["pi-01", "pi-02"], ["pi-03", "pi-04"])
+    run_until(w, lambda: "pi-03" in w.leaders(), 200)
+    w.run_for(10)
+    h3 = w.handles["pi-03"]
+    newest = hash_password("changed-in-partition")
+    h3.node.command("set_admin_hash", {"hash": newest}, h3.clock.local(w.now))
+    w.heal()
+    run_until(w, lambda: settled(w), 600)
+    w.run_for(20)
+    assert {h.node.admin["hash"] for h in w.handles.values()} == {newest}

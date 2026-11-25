@@ -19,6 +19,11 @@ class Login(M):
     password: str = Field(min_length=1, max_length=256)
 
 
+class PasswordChange(M):
+    current: str = Field(min_length=1, max_length=256)
+    new: str = Field(min_length=8, max_length=256)
+
+
 class SetBpm(M):
     bpm: float = Field(ge=40, le=240)
 
