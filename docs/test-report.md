@@ -6,7 +6,7 @@ on Raspberry Pi 3 / CRT hardware yet** — use docs/hardware.md to produce hardw
 Environment: Debian 13 x86_64 container, Python 3.11, Node 24, headless Chromium (Playwright build
 1248). Date: 2026-11-25.
 
-## Automated test suite (`pytest`, 156 tests)
+## Automated test suite (`pytest`, 158 tests)
 
 | area | file | kind |
 |---|---|---|

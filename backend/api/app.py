@@ -167,7 +167,8 @@ def create_app(core: "Core") -> FastAPI:
             "update": upd.status() if upd else None,
             "network": {**core.netmode.status(), "share_internet": node.shared.site.share_internet,
                         "pending": node.shared.site.net_mode, "wlan_ssid": core.cfg.network.wlan_ssid,
-                        "internet": core.inet.ok} if hasattr(core, "netmode") else None,
+                        "internet": core.inet.ok,
+                        "gateway": (node.extra.get("gateway") or {}).get("node")} if hasattr(core, "netmode") else None,
             "packages": {"job": core.packages.job(), "rollout": core.packages.rollout} if hasattr(core, "packages") else None,
         }
 

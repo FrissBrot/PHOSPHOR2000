@@ -65,18 +65,43 @@ def test_broadcasts_stay_on_the_cluster_interface():
     assert eth.address_of("eth0") == "192.168.1.40"         # DHCP address preferred for mDNS
 
 
-def test_uplink_toggle_uses_fixed_nmcli_argv(tmp_path):
+def test_route_ops_use_fixed_nmcli_argv(tmp_path):
     calls = []
     ad = NmcliAdapter(NetworkConfig(), runner=lambda argv, t: (calls.append(list(argv)) or (0, "", "")),
                       monitor_interval=999, sysfs=tmp_path)
     try:
-        ad._op_uplink(True)
-        ad._op_uplink(False)
+        ad._op_route("phosphor-sta", "wlan0", "dhcp", None, ())
+        ad._op_route("phosphor-sta", "wlan0", "static", "192.168.50.23", ("192.168.1.1",))
+        ad._op_route("phosphor-ap", "wlan0", "none", None, ())
+        ad._op_route("phosphor-sta", "wlan0", "static", "1.2.3.4; reboot", ())   # rejected
     finally:
         ad.close()
     mods = [c for c in calls if "modify" in c]
-    assert mods[0][-4:] == ["ipv4.never-default", "no", "ipv4.route-metric", "700"]
-    assert mods[1][-4:] == ["ipv4.never-default", "yes", "ipv4.route-metric", "700"]
+    assert len(mods) == 3
+    assert "ipv4.never-default" in mods[0] and mods[0][mods[0].index("ipv4.never-default") + 1] == "no"
+    assert mods[1][mods[1].index("ipv4.routes") + 1] == "0.0.0.0/0 192.168.50.23 700"
+    assert mods[1][mods[1].index("ipv4.dns") + 1] == "192.168.1.1"
+    assert mods[2][3] == "phosphor-ap" and mods[2][mods[2].index("ipv4.routes") + 1] == ""
+
+
+def test_gateway_choice_and_route_plan():
+    from backend.network.gateway import cable_default_route, cable_dns, choose_gateway, route_plan
+    c = {"pi-02": {"priority": 90}, "pi-04": {"priority": 70}}
+    assert choose_gateway("pi-01", c, None) == "pi-02"           # leader has no cable -> best other Pi
+    assert choose_gateway("pi-01", {**c, "pi-01": {"priority": 1100}}, None) == "pi-01"
+    assert choose_gateway("pi-01", {**c, "pi-01": {"priority": 1100}}, "pi-04") == "pi-04"   # sticky
+    assert choose_gateway("pi-01", {}, "pi-04") is None
+    gw = {"node": "pi-04", "ip": "192.168.50.24", "dns": ["192.168.1.1"], "leader": False}
+    assert route_plan("hotspot", False, "pi-02", gw) == ("static", "192.168.50.24", ["192.168.1.1"])
+    assert route_plan("hotspot", True, "pi-01", gw) == ("static", "192.168.50.24", ["192.168.1.1"])
+    assert route_plan("hotspot", False, "pi-04", gw) == ("none", None, [])
+    assert route_plan("hotspot", False, "pi-02", {**gw, "node": "pi-01", "leader": True}) == ("dhcp", None, [])
+    routes = json.dumps([{"dst": "default", "gateway": "192.168.1.1", "dev": "eth0"},
+                         {"dst": "default", "gateway": "192.168.50.1", "dev": "wlan0", "metric": 700}])
+    assert cable_default_route("eth0", runner=lambda a: routes) == "192.168.1.1"
+    assert cable_default_route("eth0", runner=lambda a: json.dumps(json.loads(routes)[1:])) is None
+    assert cable_dns("eth0", "192.168.1.1", runner=lambda a: "9.9.9.9 | 192.168.1.1\n") == ["9.9.9.9", "192.168.1.1"]
+    assert cable_dns("eth0", "192.168.1.1", runner=lambda a: "") == ["192.168.1.1"]
 
 
 def test_existing_network_election_is_fast_and_survives_leader_loss():
@@ -217,3 +242,34 @@ def test_package_rollout_order_and_live_music_guard(core):
     pk.tick(now + 3)
     pk.tick(now + 4)
     assert r["state"] == "done" and r["failed"] == ["pi-02"] and set(r["done"]) == {"pi-03", "pi-01"}
+
+
+def test_follower_with_cable_becomes_gateway_for_everyone(core, monkeypatch):
+    """Leader without cable: the Pi that has cable internet shares it; others route via it."""
+    from backend.services import system
+    units = []
+    monkeypatch.setattr(system, "start_unit", lambda u: units.append(u) or True)
+    routes = []
+
+    class Tool:
+        def set_route(self, profile, iface, kind, gw, dns):
+            routes.append((profile, kind, gw, tuple(dns)))
+    core._nmtool = Tool()
+    core.cfg.network.manage = True
+    site = core.node.shared.site.model_copy(update={"share_internet": True})
+    core.node.shared = core.node.shared.model_copy(update={"site": site})
+    now = time.monotonic()
+    core.node.election._on_beacon({"id": "pi-04", "prio": 70, "state": "FOLLOWER", "leader_id": "pi-01",
+                                   "up": True, "up_dns": ["192.168.1.1"]}, now)
+    core.node.peer_ips["pi-04"] = "192.168.50.24"
+    core._uplink_at = now          # no detection thread in the test: leader has no cable
+    core.gateway_tick(now, True)
+    gw = core.node.extra["gateway"]
+    assert gw["node"] == "pi-04" and gw["ip"] == "192.168.50.24"
+    assert routes[-1] == ("phosphor-ap", "static", "192.168.50.24", ("192.168.1.1",))   # leader routes via pi-04
+    assert units == []                                                                 # leader does no NAT
+    # switching sharing off removes the route again
+    site = core.node.shared.site.model_copy(update={"share_internet": False})
+    core.node.shared = core.node.shared.model_copy(update={"site": site})
+    core.gateway_tick(now + 1, False)
+    assert core.node.extra["gateway"] is None and routes[-1][1] == "none"

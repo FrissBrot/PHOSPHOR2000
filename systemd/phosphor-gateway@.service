@@ -1,0 +1,7 @@
+# This Pi shares its cable internet with the cluster (instance: on | off). Started by the core.
+[Unit]
+Description=PHOSPHOR2000 internet gateway %i
+
+[Service]
+Type=oneshot
+ExecStart=/opt/phosphor2000/scripts/gateway.sh %i

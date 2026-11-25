@@ -74,7 +74,7 @@ def request_persist() -> bool:
 def start_unit(unit: str) -> bool:
     """Start one of the whitelisted root oneshots (polkit allows exactly these)."""
     allowed = {"phosphor-netmode.service", "phosphor-apt.service", "phosphor-update.service",
-               "phosphor-persist.service"}
+               "phosphor-persist.service", "phosphor-gateway@on.service", "phosphor-gateway@off.service"}
     if unit not in allowed:
         raise ValueError("unit not allowed")
     argv = ["/usr/bin/systemctl", "--no-ask-password", "--no-block", "start", unit]

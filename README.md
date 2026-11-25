@@ -9,7 +9,7 @@ line-in. No router, no internet, no permanent master: the Pis form their own Wi-
 (`PHOSPHOR2000`, admin at `http://192.168.50.1:8080/admin/`) and hand the hotspot over when
 the leader disappears.
 
-> **Status:** software complete with 156 automated tests (unit, simulated cluster integration,
+> **Status:** software complete with 158 automated tests (unit, simulated cluster integration,
 > desktop-browser integration). **Not yet validated on real Pi/CRT hardware** — see
 > [docs/test-report.md](docs/test-report.md) and the checklist in [docs/hardware.md](docs/hardware.md).
 

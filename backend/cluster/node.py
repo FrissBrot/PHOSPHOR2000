@@ -135,6 +135,7 @@ class ClusterNode:
         self.cal_history: list[dict] = []            # replicated calibration history (newest last, max 50)
         self.extra: dict = {}                         # replicated leader-owned state (update rollout)
         self.internet: bool | None = None             # this Pi reaches the package mirror
+        self.uplink: dict = {"cable": False, "ok": None, "dns": []}   # own cable internet
 
     # ================================================================ helpers
     def _on_transition(self, tr: Transition) -> None:
@@ -268,7 +269,9 @@ class ClusterNode:
     # =============================================================== beacons
     def _beacon(self, local: float, now_c: float) -> dict:
         b = {"t": "beacon", **self.election.beacon_fields(local)}
-        b.update({"ver": self.version, "tl_rev": self.timeline.revision, "shared_rev": self.shared_rev,
+        b.update({"ver": self.version, "up": bool(self.uplink.get("cable") and self.uplink.get("ok")),
+                  "up_dns": self.uplink.get("dns") or [],
+                  "tl_rev": self.timeline.revision, "shared_rev": self.shared_rev,
                   "has_audio": self.has_audio,
                   "audio_live": bool(self.local_audio and self.local_audio.get("live"))})
         return b
@@ -924,6 +927,8 @@ class ClusterNode:
             "net_mode": self.cfg.network.mode,
             "net_failed_rev": self.net_failed_rev,
             "internet": self.internet,
+            "uplink": self.uplink,
+            "gateway": (self.extra.get("gateway") or {}).get("node"),
             "apt": self.apt_job,
             "version": self.version,
             "alerts": self.alerts(local),

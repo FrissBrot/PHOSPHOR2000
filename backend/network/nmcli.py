@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import logging
 import queue
+import re
 import subprocess
 import threading
 import time
@@ -137,15 +138,41 @@ class NmcliAdapter(NetworkAdapter):
         return False
 
     def set_uplink(self, on: bool) -> None:
-        """Use the leader as internet gateway (its NM 'shared' AP already NATs to its Ethernet)."""
-        self._enqueue(("uplink", on))
+        """Hotspot follower: use the hotspot leader as gateway (its NM 'shared' AP NATs)."""
+        self.set_route(self.cfg.sta_connection, self.cfg.interface, "dhcp" if on else "none", None, [])
 
-    def _op_uplink(self, on: bool) -> None:
-        self._nm("connection", "modify", self.cfg.sta_connection,
-                 "ipv4.never-default", "no" if on else "yes", "ipv4.route-metric", "700", timeout=10)
-        if self.status().mode == RadioMode.STATION:
+    def set_route(self, profile: str, iface: str, kind: str, gw: str | None, dns: list[str]) -> None:
+        """Internet via another Pi: kind none | dhcp | static (see backend/network/gateway.py)."""
+        self._enqueue(("route", profile, iface, kind, gw, tuple(dns)))
+
+    def _op_uplink(self, on: bool) -> None:   # backwards compatible name
+        self._op_route(self.cfg.sta_connection, self.cfg.interface, "dhcp" if on else "none", None, ())
+
+    def _op_route(self, profile: str, iface: str, kind: str, gw: str | None, dns: tuple) -> None:
+        ok_ip = re.compile(r"^\d{1,3}(\.\d{1,3}){3}$")
+        if kind == "static" and not (gw and ok_ip.match(gw)):
+            return
+        dns = tuple(d for d in dns if ok_ip.match(d))
+        args = ["connection", "modify", profile, "ipv4.route-metric", "700"]
+        if kind == "dhcp":
+            args += ["ipv4.never-default", "no", "ipv4.routes", "", "ipv4.dns", ""]
+        elif kind == "static":
+            args += ["ipv4.never-default", "yes", "ipv4.routes", f"0.0.0.0/0 {gw} 700",
+                     "ipv4.dns", " ".join(dns), "ipv4.dns-priority", "50"]
+        else:
+            args += ["ipv4.never-default", "yes", "ipv4.routes", "", "ipv4.dns", ""]
+        self._nm(*args, timeout=10)
+        if self._active_connection_on(iface) == profile:
             # apply to the running connection without dropping it
-            self._nm("device", "reapply", self.cfg.interface, timeout=10)
+            self._nm("device", "reapply", iface, timeout=10)
+
+    def _active_connection_on(self, iface: str) -> str | None:
+        rc, out, _ = self._nm("-t", "-f", "GENERAL.CONNECTION", "device", "show", iface, timeout=5)
+        for line in out.splitlines() if rc == 0 else []:
+            f = split_terse(line)
+            if len(f) >= 2 and f[0] == "GENERAL.CONNECTION":
+                return f[1] or None
+        return None
 
     def close(self) -> None:
         self._stop.set()

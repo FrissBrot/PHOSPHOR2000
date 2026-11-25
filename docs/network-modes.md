@@ -33,12 +33,18 @@ Hand-off from the command line: `sudo /opt/phosphor2000/scripts/configure-networ
 
 ## Internet for updates
 
-* **hotspot mode:** plug an Ethernet cable with internet into the **master** (the audio Pi).
-  Dashboard → Config → Network → *share the master's cable internet with all Pis*. The master's
-  hotspot already NATs (NetworkManager "shared"); the switch makes the other Pis use it as
-  default route (metric 700: a Pi with its own cable keeps using its cable). Only the current
-  master shares — if another Pi becomes master, it needs the cable.
-* **wlan / ethernet mode:** the Pis use the router of that network directly, if it has internet.
+* **hotspot and wlan mode — any Pi can share:** plug an Ethernet cable with internet into *any*
+  Pi and switch on Dashboard → Config → Network → *share cable internet*. The master picks one
+  gateway: itself if it has cable internet, otherwise the highest-priority Pi that has it; the
+  choice stays while that Pi keeps working (no flapping). The gateway Pi forwards and masquerades
+  the cluster's traffic to its cable (`phosphor-gateway@on`, separate nftables table); every other
+  Pi gets a default route via the gateway's cluster address and the gateway's DNS servers
+  (metric 700 — a Pi with its own cable keeps using it), applied with `nmcli device reapply`
+  without reconnecting. In hotspot mode a master-gateway needs no extra rules (the hotspot already
+  NATs). The Updates table shows per Pi: internet yes/no, *cable*, and which Pi is the *GATEWAY*.
+* **ethernet mode:** the switch network itself needs a router with internet (a Pi 3 has only one
+  Ethernet port, which is the cluster cable). In wlan mode a Wi-Fi router with internet is used
+  directly as well.
 * "internet" column per Pi in Updates; *check internet* tests the package mirror.
 
 ## OS package updates (Raspberry Pi OS)

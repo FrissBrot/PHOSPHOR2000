@@ -199,7 +199,11 @@ class Core:
         self.inet = InternetProbe()
         self.admin_ap = None          # ethernet mode: the leader also runs the admin hotspot
         self.admin_ap_on = False
-        self.uplink_applied: bool | None = None
+        self.uplink_applied: tuple | None = None
+        self._uplink_raw = {"cable": False, "dns": []}
+        self._uplink_at = -1e9
+        self._nmtool = None
+        self._nat_on = False
         self.udp: UdpTransport | None = None
         self.node = ClusterNode(cfg, adapter or make_adapter(cfg), self.send, has_audio=has_audio)
         self.node.on_restart_request = self._restart
@@ -386,14 +390,76 @@ class Core:
             iface = net.interface if net.mode == "wlan" else net.eth_interface
             self.mdns.ensure(self.ifaces.address_of(iface) if leader else None)
         share = self.node.shared.site.share_internet
-        if managed and net.mode == "hotspot" and share != self.uplink_applied:
-            setter = getattr(self.node.election.adapter, "set_uplink", None)
-            if setter:
-                setter(share)
-                self.node._log("info", f"internet via the leader {'enabled' if share else 'disabled'}")
-            self.uplink_applied = share
         self.node.internet = self.inet.ok
         self.inet.tick(now, wanted=share or net.mode != "hotspot" or self.apt_wanted())
+        if managed and net.mode in ("hotspot", "wlan"):
+            self.gateway_tick(now, share)
+
+    # ------------------------------------------------------------ internet sharing (any Pi)
+    def _detect_uplink(self) -> None:
+        from backend.network.gateway import cable_default_route, cable_dns
+        eth = self.cfg.network.eth_interface
+        router = cable_default_route(eth)
+        self._uplink_raw = {"cable": router is not None, "dns": cable_dns(eth, router) if router else []}
+
+    def _cluster_ip(self) -> str | None:
+        net = self.cfg.network
+        if net.mode == "hotspot" and self.node.is_leader():
+            return net.gateway
+        return self.ifaces.address_of(net.interface)
+
+    def gateway_tick(self, now: float, share: bool) -> None:
+        import threading
+        from backend.network.gateway import choose_gateway, route_plan
+        if now - self._uplink_at > 30.0:
+            self._uplink_at = now
+            threading.Thread(target=self._detect_uplink, daemon=True, name="uplink").start()
+        raw = self._uplink_raw
+        self.node.uplink = {"cable": raw["cable"], "ok": bool(raw["cable"] and self.inet.ok), "dns": raw["dns"]}
+        node = self.node
+        # leader: choose the gateway for the whole cluster
+        if node.is_leader():
+            gw = None
+            if share:
+                cands = {}
+                if node.uplink["ok"]:
+                    cands[node.id] = {"priority": node.election.priority, "ip": self._cluster_ip(), "dns": raw["dns"]}
+                for pid, p in node.election.peers.items():
+                    if now - p.last_seen < 10 and p.info.get("up") and node.peer_ips.get(pid):
+                        cands[pid] = {"priority": p.priority, "ip": node.peer_ips[pid], "dns": p.info.get("up_dns") or []}
+                cur = (node.extra.get("gateway") or {}).get("node")
+                pick = choose_gateway(node.id, cands, cur)
+                if pick:
+                    gw = {"node": pick, "leader": pick == node.id, **cands[pick]}
+            if gw != node.extra.get("gateway"):
+                node.extra["gateway"] = gw
+                node._log("info", f"internet gateway: {gw['node'] if gw else 'none'}")
+                node._broadcast_state(now)
+        gw = node.extra.get("gateway") if share else None
+        kind, ip, dns = route_plan(self.cfg.network.mode, node.is_leader(), node.id, gw)
+        net = self.cfg.network
+        profile = (net.ap_connection if node.is_leader() else net.sta_connection) if net.mode == "hotspot" \
+            else net.wlan_connection
+        nat = bool(gw and gw.get("node") == node.id and not (net.mode == "hotspot" and node.is_leader()))
+        key = (kind, ip, tuple(dns), profile, nat)
+        if key == self.uplink_applied:
+            return
+        self.uplink_applied = key
+        if self._nmtool is None:
+            ad = node.election.adapter
+            if hasattr(ad, "set_route"):
+                self._nmtool = ad
+            elif shutil.which("nmcli"):
+                from backend.network.nmcli import NmcliAdapter
+                self._nmtool = NmcliAdapter(net)
+        if self._nmtool is not None:
+            self._nmtool.set_route(profile, net.interface, kind, ip, dns)
+        if nat != self._nat_on:
+            self._nat_on = nat
+            from backend.services.system import start_unit
+            start_unit(f"phosphor-gateway@{'on' if nat else 'off'}.service")
+        node._log("info", f"internet: {'this Pi shares its cable' if nat else kind}"
+                          f"{' via ' + ip if ip else ''}")
 
     def apt_wanted(self) -> bool:
         return bool(self.packages.rollout and self.packages.rollout.get("state") == "running") or self.packages.busy()

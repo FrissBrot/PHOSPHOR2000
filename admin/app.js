@@ -370,7 +370,8 @@ function renderUpdates() {
     const tr = el("tr", {}, el("td", {}, id + (n.self ? " *" : "")), el("td", {}, n.state || "?"),
       el("td", { class: v === u.newest ? "ok" : "warn" }, v + (v === u.newest ? "" : "  (older)")),
       el("td", {}, n.net_mode || "?"),
-      el("td", { class: n.internet ? "ok" : "" }, n.internet == null ? "–" : (n.internet ? "yes" : "no")),
+      el("td", { class: n.internet ? "ok" : "" }, (n.internet == null ? "–" : (n.internet ? "yes" : "no")) +
+         (n.uplink && n.uplink.cable ? " · cable" : "") + (S.network && S.network.gateway === id ? " · GATEWAY" : "")),
       el("td", { class: n.apt && n.apt.state === "error" ? "warn" : "" },
          n.apt ? `${n.apt.state}${n.apt.upgraded ? " (" + n.apt.upgraded + ")" : ""}${n.apt.reboot_required ? " – reboot!" : ""}` : "–"),
       el("td", {}, el("button", { class: "ghost", onclick: () => confirm(`Roll ${id} back to its previous version?`) &&
