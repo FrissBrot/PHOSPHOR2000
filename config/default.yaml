@@ -25,7 +25,7 @@ network:
   suspect_after: 3.5           # no leader beacon -> SUSPECTED_FAILURE
   failure_after: 8.0           # still nothing -> leader considered lost
   discovery_window: 10.0       # initial scan window after boot
-  backoff_slot: 6.0            # staggered backoff per priority rank
+  backoff_slot: 8.0            # staggered backoff per priority rank
   backoff_jitter: 1.0
   min_leader_tenure: 20.0      # a leader never yields for less-ranked reasons before this
   yield_holddown: 30.0         # a node that yielded may not start an AP for this long
