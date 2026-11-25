@@ -6,6 +6,11 @@
 import { BrowserClock } from "./engine/clock.js";
 import { Renderer } from "./engine/renderer.js";
 import { Link } from "./services/link.js";
+import { PLAYABLE } from "./scenes/index.js";
+
+// Make sure the bundled VT323 is decoded before the first frames (canvas does not trigger font loads).
+document.fonts.load('40px "VT323"').catch(() => {});
+document.fonts.load('40px "VT323"', "ÄÖÜäöü").catch(() => {});
 
 const params = new URLSearchParams(location.search);
 const canvas = document.getElementById("screen");
@@ -15,7 +20,7 @@ window.__phos = renderer;
 
 function demoState(scene) {
   const segs = [];
-  const order = ["boot", "dance", "spectrum", "grid", "rain", "countdown"];
+  const order = PLAYABLE;
   for (let i = 0; i < 400; i++) {
     const sc = scene || order[i % order.length];
     segs.push({ scene: sc, start_beat: i * 16, end_beat: (i + 1) * 16, seed: 0x2000 + i * 7919, origin_beat: i * 16 });
@@ -27,9 +32,10 @@ function demoState(scene) {
     segments: segs, visual_offset_ms: Number(params.get("offset") || 0), display_latency_ms: 40,
     wall_offset: Date.now() / 1000 - performance.now() / 1000,
     sync: { uncertainty_ms: 0 }, audio_fresh: false,
-    scenes: { intensity: 0.8, countdown_target: "2027-01-01T00:00:00", countdown_label: "Y2K+27" },
+    scenes: { intensity: 0.8, countdown_target: "2027-02-05T20:00:00", countdown_label: "MATTLIBALL", phosphor: params.get("phosphor") || "#39ff14" },
     safety: { reduced_flashing: params.get("reduced") === "1", max_flash_hz: 3, max_flash_luminance: 0.85 },
-    display: { overscan: { top: 0.06, bottom: 0.06, left: 0.07, right: 0.07 }, fps_cap: Number(params.get("fps") || 25) },
+    display: { overscan: { top: 0.06, bottom: 0.06, left: 0.07, right: 0.07 }, fps_cap: Number(params.get("fps") || 25),
+               glow: Number(params.get("glow") ?? 1), crt_overlay: params.get("overlay") !== "0", hud: params.get("hud") === "1" },
     cal: params.get("cal") ? { active: true, mode: params.get("cal"), target: params.get("node") || "pi-01",
                                bpm: 120, origin: 1, tap_count: 0, result: null } : { active: false },
   };
@@ -41,7 +47,7 @@ if (params.get("demo") || params.get("bench")) {
   const bench = params.get("bench");
   renderer.setState(demoState(params.get("scene")));
   if (bench) {
-    const scenes = ["boot", "dance", "spectrum", "grid", "rain", "countdown", "calibration"];
+    const scenes = [...PLAYABLE, "calibration"];
     const per = Number(params.get("secs") || 4) * 1000;
     const res = {};
     let idx = -1, startedAt = 0, times = [];

@@ -13,7 +13,6 @@ import { hash01 } from "./prng.js";
 import { SCENES } from "../scenes/index.js";
 
 const W = 640, H = 480;
-const RAIN_CHARS = "ｱｲｳｴｵｶｷｸｹｺｻｼｽｾｿﾀﾁﾂﾃﾄ0123456789ABCDEF<>/\\|=+*#$%&@";
 const ASCII = " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~";
 
 export class Renderer {
@@ -35,9 +34,7 @@ export class Renderer {
     this.lastSegKey = null;
     this.segStartBeat = 0;
     this.atlas = {
-      rain: new GlyphAtlas(18, RAIN_CHARS),
       ascii: new GlyphAtlas(16, ASCII),
-      big: new GlyphAtlas(22, ASCII),
     };
     this.env = { W, H, atlas: this.atlas, guard: this.guard, sceneState: {} };
     this.audioCtx = null;
@@ -146,6 +143,7 @@ export class Renderer {
       cal, calTarget: cal.target, isCalTarget: cal.target === st.node, kbdHud: !!st.kbd_hud,
       sync: st.sync || {},
       offsetMs: st.visual_offset_ms ?? 0,
+      st,
     };
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.globalAlpha = 1;
@@ -155,6 +153,8 @@ export class Renderer {
     scene.draw(ctx, f, this.env);
     if (!calOn) this.transition(ctx, f, seg);
     if (calOn && cal.mode === "click") this.scheduleClicks(f);
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.shadowBlur = 0;
     this.hud(ctx, f);
   }
 
@@ -178,6 +178,9 @@ export class Renderer {
 
   hud(ctx, f) {
     const s = f.safe;
+    const abnormal = !["FOLLOWER", "LEADER", "DEMO"].includes(f.state);
+    const show = (f.st.display && f.st.display.hud) || abnormal;
+    if (!show) return;
     ctx.font = font(14);
     ctx.textBaseline = "alphabetic";
     ctx.fillStyle = "#000";

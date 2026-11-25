@@ -1,14 +1,15 @@
 # PHOSPHOR2000 (PHOSPHOR2000)
 
 A distributed, offline, retro-green visual system for **3–5 Raspberry Pi 3 B/B+**, each driving a
-**4:3 PAL CRT over composite**. Every Pi renders the same deterministic Canvas 2D animations
-(boot terminal + live clock, DANCE.EXE, spectrum analyzer, neon grid + cube, data rain, Y2K
-countdown), locked to a **distributed musical timeline** that follows the DJ mixer via a USB
+**4:3 PAL CRT over composite**. Every Pi renders the same deterministic Canvas 2D animations — the
+twelve "Cyberspace 2000" CRT visuals for the Mattliball bar (Boot, Dance.exe, Spectrum Analyzer,
+Neon Grid + Cube, Data Rain, Y2K Countdown, Mattliball 2027, Guggä-Register, Stollä-Tunnel,
+Motto.db, Bar-Netzwerk, Bis es hell wird; see [docs/scenes.md](docs/scenes.md)) — locked to a **distributed musical timeline** that follows the DJ mixer via a USB
 line-in. No router, no internet, no permanent master: the Pis form their own Wi-Fi
 (`PHOSPHOR2000`, admin at `http://192.168.50.1:8080/admin/`) and hand the hotspot over when
 the leader disappears.
 
-> **Status:** software complete with 107 automated tests (unit, simulated cluster integration,
+> **Status:** software complete with 113 automated tests (unit, simulated cluster integration,
 > desktop-browser integration). **Not yet validated on real Pi/CRT hardware** — see
 > [docs/test-report.md](docs/test-report.md) and the checklist in [docs/hardware.md](docs/hardware.md).
 
@@ -44,6 +45,7 @@ the leader disappears.
 
 | doc | content |
 |---|---|
+| [scenes](docs/scenes.md) | the twelve visuals, timing rules, look settings |
 | [architecture](docs/architecture.md) | processes, clock domains, replicated state, code map |
 | [installation](docs/installation.md) | SD card → cluster, updating, rollback, ports & security |
 | [network-recovery](docs/network-recovery.md) | network states, election, split brain, limits, recovery |

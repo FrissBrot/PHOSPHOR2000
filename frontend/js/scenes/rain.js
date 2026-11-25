@@ -1,44 +1,63 @@
-// DATA RAIN: seeded falling characters. Each column's speed/offset comes from
-// the scene seed; positions are pure functions of the beat, so all CRTs and a
-// restarted browser show the identical frame for the same musical time.
-import { hash01 } from "../engine/prng.js";
-import { GREEN_HOT, font, GREEN } from "../engine/glyphs.js";
+// 05 DATA RAIN — 20 seeded columns falling at tempo-locked speeds, terminal box.
+import { begin, end, text, box, blinkOn, bpmLabel, FONT, DW, BG } from "./kit.js";
+import { Mulberry32 } from "../engine/prng.js";
+
+const CHARS = "0123456789ABCDEF<>/\\#$%&*+=:;[]{}";
+const MSGS = ["ACCESS GRANTED", "BASS DETECTED", "UPLOADING GROOVE", "SYSTEM OVERLOAD"];
+let atlas = null;
+
+function getAtlas(phos) {
+  if (atlas && atlas.phos === phos && atlas.fontReady === document.fonts.check(`40px ${FONT}`)) return atlas;
+  const c = document.createElement("canvas");
+  const cw = 24, ch = 40;
+  c.width = cw * CHARS.length; c.height = ch;
+  const g = c.getContext("2d");
+  g.font = `40px ${FONT}`; g.textBaseline = "top"; g.fillStyle = phos;
+  for (let i = 0; i < CHARS.length; i++) g.fillText(CHARS[i], i * cw, 0);
+  atlas = { c, cw, ch, phos, fontReady: document.fonts.check(`40px ${FONT}`) };
+  return atlas;
+}
+
+function columns(seed) {
+  const r = new Mulberry32(seed);
+  const cols = [];
+  for (let i = 0; i < 20; i++) {
+    const chars = [];
+    for (let j = 0; j < 35; j++) chars.push(Math.floor(r.random() * CHARS.length));
+    cols.push({ x: 12 + i * 51, chars, speed: 4 + r.random() * 6, phase: r.random(), o: 0.2 + r.random() * 0.4 });
+  }
+  return cols;
+}
 
 export default {
   draw(ctx, f, env) {
-    const at = env.atlas.rain;
-    const cols = Math.floor(640 / at.cw);
-    const rows = Math.ceil(480 / at.ch) + 1;
-    const n = at.chars.length;
-    const sb = f.sceneBeat;
-    for (let c = 0; c < cols; c++) {
-      const speed = 2 + hash01(f.seed, c, 1) * 6;           // rows per beat
-      const len = 6 + Math.floor(hash01(f.seed, c, 2) * 14);
-      const off = hash01(f.seed, c, 3) * (rows + len);
-      const span = rows + len;
-      const head = (sb * speed + off) % span;
-      const x = c * at.cw;
-      for (let k = 0; k < len; k++) {
-        const r = Math.floor(head) - k;
-        if (r < 0 || r >= rows) continue;
-        // characters mutate on sixteenths
-        const ci = Math.floor(hash01(f.seed, c, r, Math.floor(f.sixteenth / (k === 0 ? 1 : 3))) * n);
-        const row = k === 0 ? 2 : k < len * 0.5 ? 0 : 1;
-        at.draw(ctx, at.chars[ci], x, r * at.ch, row);
+    const k = begin(ctx, f, env);
+    const st = env.sceneState;
+    if (!st.cols) st.cols = columns(f.seed);
+    const a = getAtlas(k.phos);
+    for (const c of st.cols) {
+      const durBeats = c.speed * 128 / 60;            // design: speed * 128/bpm seconds
+      const frac = (((f.sceneBeat / durBeats) + c.phase) % 1 + 1) % 1;
+      const top = -1350 + frac * 2150;
+      for (let j = 0; j < 35; j++) {
+        const y = top + j * 38;
+        if (y < -40 || y > 768) continue;
+        const m = Math.min(1, j / (35 * 0.75));          // mask: transparent top -> opaque bottom
+        ctx.globalAlpha = c.o * m;
+        ctx.drawImage(a.c, c.chars[j] * a.cw, 0, a.cw, a.ch, c.x, y, a.cw, a.ch);
       }
     }
-    // beat pulse band (no full-screen flash)
-    ctx.globalAlpha = 0.25 * env.guard.pulse(f.kick) * f.intensity;
-    ctx.fillStyle = GREEN;
-    ctx.fillRect(0, 0, 640, 480 * 0.04);
-    ctx.fillRect(0, 480 * 0.96, 640, 480 * 0.04);
     ctx.globalAlpha = 1;
-    const s = f.safe;
-    ctx.fillStyle = "#000";
-    ctx.fillRect(s.x - 4, s.y + s.h / 2 - 26, 300, 40);
-    ctx.font = font(26);
-    ctx.textBaseline = "top";
-    ctx.fillStyle = GREEN_HOT;
-    ctx.fillText("DATA RAIN", s.x, s.y + s.h / 2 - 20);
+    const bx = DW / 2 - 410, by = 234, bw = 820, bh = 300;
+    box(k, bx, by, bw, bh, 7, { fill: BG });
+    text(k, "[ TERMINAL ]", bx + 40, by + 32, 38, { spacing: 1 });
+    text(k, `BPM ${bpmLabel(f)}`, bx + bw - 40, by + 32, 38, { align: "right", spacing: 1 });
+    const t = k.t;
+    const msgOn = k.reduced || blinkOn(f, 0.9);
+    text(k, MSGS[Math.floor(t / 32) % MSGS.length], DW / 2, by + 90, 84, { align: "center", spacing: 2, alpha: msgOn ? 1 : 0.25 });
+    const step = t % 32, filled = Math.min(14, Math.floor((step / 31) * 14));
+    text(k, "[" + "#".repeat(filled) + ".".repeat(14 - filled) + "] " + Math.round((filled / 14) * 100) + "%",
+         DW / 2, by + 196, 46, { align: "center", spacing: 1 });
+    end(k);
   },
 };

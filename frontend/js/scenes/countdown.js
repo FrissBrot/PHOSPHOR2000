@@ -1,60 +1,43 @@
-// Y2K COUNTDOWN: configurable target date/label, big digits, beat accents.
-import { GREEN, GREEN_DIM, GREEN_HOT, font } from "../engine/glyphs.js";
-
-const pad = (n, w = 2) => String(n).padStart(w, "0");
-
-export function parseTarget(s) {
-  // ISO local time "YYYY-MM-DDTHH:MM:SS" (no zone => local wall clock of the cluster)
-  const m = /^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2})(?::(\d{2}))?)?$/.exec(s || "");
-  if (!m) return new Date(2027, 0, 1);
-  return new Date(+m[1], +m[2] - 1, +m[3], +(m[4] || 0), +(m[5] || 0), +(m[6] || 0));
-}
+// 06 Y2K COUNTDOWN — 23:59:50 -> 00:00:00 loop on the beat, Y2K bug glitches.
+import { begin, end, header, text, bpmLabel, DW } from "./kit.js";
 
 export default {
   draw(ctx, f, env) {
-    const s = f.safe;
-    const target = parseTarget(f.countdown.countdown_target);
-    let diff = Math.floor((target - f.wall) / 1000);
-    const past = diff <= 0;
-    diff = Math.abs(diff);
-    const d = Math.floor(diff / 86400), h = Math.floor(diff / 3600) % 24, m = Math.floor(diff / 60) % 60, sec = diff % 60;
-    ctx.textAlign = "center";
-    ctx.textBaseline = "top";
-    ctx.font = font(24);
-    ctx.fillStyle = GREEN;
-    ctx.fillText(past ? "TIME SINCE" : "COUNTDOWN TO", s.x + s.w / 2, s.y + 10);
-    ctx.font = font(40);
-    ctx.fillStyle = GREEN_HOT;
-    ctx.fillText(f.countdown.countdown_label || "Y2K", s.x + s.w / 2, s.y + 44);
-    ctx.font = font(84);
-    ctx.fillStyle = GREEN;
-    const big = `${pad(h)}:${pad(m)}:${pad(sec)}`;
-    const pulse = env.guard.pulse(f.kick) * f.intensity;
+    const k = begin(ctx, f, env);
+    const t = k.t, onBeat = k.onBeat;
+    const p = Math.floor(t / 2) % 26;
+    let headline, time, date, sub, bar, jx = 0, skew = 0, headOpacity = 1;
+    if (p < 10) {
+      headline = "COUNTDOWN TO Y2K"; time = "23:59:" + (50 + p); date = "31.12.1999";
+      sub = "T-MINUS " + (10 - p) + " ■ HOLD ON TO YOUR DISKETTES";
+      bar = "[" + "█".repeat(p * 2) + "░".repeat(20 - p * 2) + "]";
+    } else {
+      const q = p - 10;
+      const glitch = q === 4 || q === 5 || q === 11 || q === 12;
+      time = "00:00:00";
+      bar = "[" + (onBeat ? "█░" : "░█").repeat(10) + "]";
+      if (glitch) {
+        headline = "!! Y2K BUG DETECTED !!";
+        date = onBeat ? "01.01.1900" : "00.00.19100";
+        sub = "SYSTEM DATE CORRUPTED ■ KEEP DANCING";
+        const n = Math.sin(t * 91.7) * 10000;
+        jx = k.reduced ? 0 : Math.round((n - Math.floor(n) - 0.5) * 40);
+        skew = k.reduced ? 0 : (onBeat ? -6 : 4);
+      } else {
+        headline = "HAPPY NEW MILLENNIUM"; date = "01.01.2000"; sub = "WELCOME TO CYBERSPACE";
+        headOpacity = k.reduced ? 0.8 : (onBeat ? 1 : 0.35);
+      }
+    }
+    header(k, "RTC CLOCK // BIOS v1.99", `BPM ${bpmLabel(f)}`);
     ctx.save();
-    ctx.translate(s.x + s.w / 2, s.y + 150);
-    ctx.scale(1 + 0.04 * pulse, 1 + 0.04 * pulse);
-    ctx.fillText(big, 0, 0);
+    ctx.translate(DW / 2 + jx, 360);
+    ctx.transform(1, 0, Math.tan(skew * Math.PI / 180), 1, 0, 0);
+    text(k, headline, 0, -205, 52, { align: "center", spacing: 8, alpha: headOpacity });
+    text(k, time, 0, -140, 220, { align: "center", spacing: 6 });
+    text(k, date, 0, 60, 64, { align: "center", spacing: 12 });
+    text(k, sub, 0, 150, 42, { align: "center", spacing: 1 });
     ctx.restore();
-    ctx.font = font(30);
-    ctx.fillStyle = GREEN_DIM;
-    ctx.fillText(`${d} DAYS`, s.x + s.w / 2, s.y + 250);
-    if (past) {
-      // celebratory flash on downbeats, rate/luminance limited by the guard
-      const a = env.guard.flash(`cd${f.bar}`, f.t, f.beatInBar === 0 ? 0.5 * Math.exp(-f.phase * 5) : 0);
-      if (a > 0.01) { ctx.globalAlpha = a; ctx.fillStyle = GREEN; ctx.fillRect(0, 0, 640, 480); ctx.globalAlpha = 1; }
-      ctx.font = font(28);
-      ctx.fillStyle = GREEN_HOT;
-      ctx.fillText("HAPPY NEW MILLENNIUM", s.x + s.w / 2, s.y + 310);
-    }
-    // progress ticks: 16 cells advancing per sixteenth within the bar
-    const cells = 16, cw = s.w / cells;
-    const k = Math.floor((f.beat % f.bpb) * 4);
-    for (let i = 0; i < cells; i++) {
-      ctx.fillStyle = i <= k ? GREEN : GREEN_DIM;
-      ctx.globalAlpha = i <= k ? 0.9 : 0.3;
-      ctx.fillRect(s.x + i * cw + 2, s.y + s.h - 40, cw - 4, 14);
-    }
-    ctx.globalAlpha = 1;
-    ctx.textAlign = "left";
+    text(k, bar, 56, 610, 44);
+    end(k);
   },
 };

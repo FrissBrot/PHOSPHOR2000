@@ -6,7 +6,7 @@ on Raspberry Pi 3 / CRT hardware yet** — use docs/hardware.md to produce hardw
 Environment: Debian 13 x86_64 container, Python 3.11, Node 24, headless Chromium (Playwright build
 1248). Date: 2026-11-25.
 
-## Automated test suite (`pytest`, 107 tests)
+## Automated test suite (`pytest`, 113 tests)
 
 | area | file | kind |
 |---|---|---|
@@ -60,8 +60,7 @@ octave. Analysis cost ~1.6 % of one x86 core in real time; estimated ~15 % of on
 
 ## Renderer benchmark (desktop Chromium, CPU throttled 6×)
 
-JavaScript draw time per frame (p50 / p95 ms): boot 1.4/2.9, dance 1.0/1.9, spectrum 1.7/2.9,
-grid 1.1/1.9, rain 6.2/9.0, countdown 1.0/1.8, calibration 0.7/1.9. Budget at 25 fps: 40 ms.
+JavaScript draw time per frame (p50 / p95 ms, glow=1, overlay on): boot 1.5/5.9, dance 1.6/3.0, spectrum 1.6/2.8, grid 1.9/3.9, rain 4.7/8.2, countdown 1.7/4.3, mattliball 1.5/4.3, guggen 2.3/4.7, stollen 1.3/3.1, mottos 1.9/4.8, bars 2.0/4.3, hell 1.7/3.6, calibration 0.8/1.8. Budget at 25 fps: 40 ms.
 This excludes rasterisation/compositing in Chromium's GPU process and is **not** a Pi 3
 measurement; H2 in docs/hardware.md is the real test.
 

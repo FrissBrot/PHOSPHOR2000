@@ -1,44 +1,50 @@
-// SPECTRUM ANALYZER: live frequency bars from the audio node, or an
-// explicitly labelled SYNTHETIC fallback when no live spectrum is fresh.
-import { GREEN, GREEN_DIM, GREEN_HOT, font } from "../engine/glyphs.js";
+// 03 SPECTRUM ANALYZER — live bands from the audio node, or the design's
+// synthetic pattern, explicitly labelled SYNTH when no live spectrum is fresh.
+import { begin, end, header, text, noise, bpmLabel, DW } from "./kit.js";
+
+const N = 16, MAXH = 400, TOP = 129, BOTTOM = 559;
 
 export default {
   draw(ctx, f, env) {
-    const s = f.safe;
-    const spec = f.audio.spectrum || [];
-    const n = spec.length || 32;
+    const k = begin(ctx, f, env);
+    const t = k.t, onBeat = k.onBeat;
     const st = env.sceneState;
-    st.peaks = st.peaks || new Array(n).fill(0);
-    const top = s.y + 40, bottom = s.y + s.h - 50;
-    const hgt = bottom - top;
-    const bw = s.w / n;
-    const seg = 10;  // LED segment height
-    for (let i = 0; i < n; i++) {
-      const v = Math.max(0, Math.min(1, spec[i] ?? 0));
-      st.peaks[i] = Math.max(v, (st.peaks[i] || 0) - 0.02);
-      const lit = Math.floor(v * hgt / seg);
-      const x = s.x + i * bw + 1;
-      for (let k = 0; k < lit; k++) {
-        const y = bottom - (k + 1) * seg;
-        ctx.fillStyle = k > (hgt / seg) * 0.8 ? GREEN_HOT : GREEN;
-        ctx.fillRect(x, y + 2, bw - 3, seg - 3);
+    st.peaks = st.peaks || new Array(N).fill(0);
+    const dt = st.lastTick === undefined ? 0 : Math.max(0, f.sceneBeat * 2 - st.lastTick);
+    st.lastTick = f.sceneBeat * 2;
+    header(k, `SPECTRUM ANALYZER // ${f.audioLive ? "CH-1" : "SYNTH"}`, `BPM ${bpmLabel(f)} ■ GAIN +${onBeat ? 12 : 9} dB`,
+           { gap: 18 });
+    const live = f.audioLive && f.audio.spectrum && f.audio.spectrum.length >= 2 * N;
+    const x0 = 60, x1 = DW - 60, gap = 18, bw = (x1 - x0 - gap * (N - 1)) / N;
+    let sum = 0;
+    for (let i = 0; i < N; i++) {
+      let v;
+      if (live) {
+        v = Math.min(1, (f.audio.spectrum[2 * i] + f.audio.spectrum[2 * i + 1]) / 2);
+      } else {
+        const pos = i / (N - 1);
+        const bassKick = onBeat ? Math.max(0, 1 - pos * 2.2) : 0.15 * (1 - pos);
+        const hat = !onBeat ? Math.max(0, pos - 0.6) * 1.6 : 0;
+        const body = 0.25 + 0.45 * noise(t, i) * (1 - pos * 0.4);
+        v = Math.min(1, body + bassKick * 0.6 + hat * 0.5);
       }
-      ctx.fillStyle = GREEN_HOT;
-      ctx.fillRect(x, bottom - st.peaks[i] * hgt - 3, bw - 3, 3);
+      sum += v;
+      const h = 18 + v * (MAXH - 18);
+      st.peaks[i] = Math.max(h, st.peaks[i] - 40 * dt);
+      const x = x0 + i * (bw + gap);
+      ctx.fillStyle = k.phos;
+      ctx.shadowColor = k.phos;
+      ctx.shadowBlur = k.glowPx;
+      for (let y = BOTTOM; y > BOTTOM - h; y -= 26) ctx.fillRect(x, Math.max(BOTTOM - h, y - 18), bw, Math.min(18, y - (BOTTOM - h)));
+      ctx.fillRect(x, BOTTOM - st.peaks[i] - 16, bw, 10);
     }
-    ctx.fillStyle = GREEN_DIM;
-    ctx.fillRect(s.x, bottom + 2, s.w, 2);
-    ctx.font = font(22);
-    ctx.textBaseline = "top";
-    ctx.fillStyle = GREEN;
-    ctx.fillText("SPECTRUM ANALYZER", s.x, s.y);
-    ctx.textAlign = "right";
-    ctx.fillStyle = f.audioLive ? GREEN : GREEN_HOT;
-    ctx.fillText(f.audioLive ? "LIVE INPUT" : "SYNTHETIC", s.x + s.w, s.y);
-    ctx.textAlign = "left";
-    ctx.font = font(14);
-    ctx.fillStyle = GREEN_DIM;
-    const lvl = (x) => "#".repeat(Math.round((x || 0) * 12)).padEnd(12, ".");
-    ctx.fillText(`BASS ${lvl(f.audio.bass)} MID ${lvl(f.audio.mid)} TRE ${lvl(f.audio.treble)}`, s.x, bottom + 12);
+    ctx.shadowBlur = 0;
+    ctx.fillRect(56, BOTTOM, DW - 112, 6);
+    text(k, "BASS", 60, 583, 36);
+    text(k, "MID", DW / 2, 583, 36, { align: "center" });
+    text(k, "HIGH", DW - 60, 583, 36, { align: "right" });
+    const level = Math.round((sum / N) * 14), r = Math.max(0, level - 1);
+    text(k, "L " + "█".repeat(level) + "░".repeat(14 - level) + "  R " + "█".repeat(r) + "░".repeat(14 - r), 56, 640, 42, { spacing: 1 });
+    end(k);
   },
 };

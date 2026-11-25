@@ -1,53 +1,47 @@
-// DANCE.EXE: ASCII figures switching poses on beats/eighths, deterministic by seed.
-import { GREEN, GREEN_HOT, GREEN_DIM, font } from "../engine/glyphs.js";
-import { hash01 } from "../engine/prng.js";
+// 02 DANCE.EXE — five ASCII dancers switching moves on eighths, light floor.
+import { begin, end, header, text, pre, alt, bpmLabel, DW } from "./kit.js";
 
-const POSES = [
-  [" o ", "/|\\", "/ \\"],
-  ["\\o/", " | ", "/ \\"],
-  [" o/", "/| ", "/ >"],
-  ["\\o ", " |\\", "< \\"],
-  [" o ", "<|>", " |\\"],
-  ["_o_", " | ", "/ \\"],
-  [" o ", "-|-", "| |"],
-  ["\\o_", " / ", "| \\"],
+const F = {
+  A: [" \\o/ ", "  |  ", " / \\ "], B: ["  o  ", " /|\\ ", " / \\ "], C: [" _o  ", "  |\\ ", " / > "],
+  D: ["  o_ ", " /|  ", " < \\ "], E: [" \\o  ", "  |\\ ", " / \\ "], G: ["  o/ ", " /|  ", " / \\ "],
+  H: ["     ", " \\o/ ", " / \\ "], I: [" _o_ ", "  |  ", " / \\ "], J: [" \\o_ ", "  |  ", " / | "],
+  K: [" _o/ ", "  |  ", " | \\ "],
+};
+const MOVES = [
+  ["A", "B", "A", "B", "C", "D", "C", "D"], ["E", "G", "E", "G", "A", "H", "A", "H"],
+  ["I", "B", "I", "B", "J", "K", "J", "K"], ["C", "D", "C", "D", "A", "H", "A", "H"],
 ];
+const SHOUTS = ["*** DANCE MODE ON ***", ">> MOVE YOUR BODY <<", "[ 100% UPTIME ]", ">> NO SLEEP TILL Y2K <<"];
 
 export default {
   draw(ctx, f, env) {
-    const s = f.safe;
-    const n = 4 + Math.floor(hash01(f.seed, 7) * 2);  // 4..5 dancers
-    const cell = s.w / n;
-    const size = 30;
-    ctx.font = font(size);
-    ctx.textBaseline = "top";
-    ctx.textAlign = "center";
-    const half = f.eighth;                  // pose changes each eighth for even dancers, beat for odd
-    for (let i = 0; i < n; i++) {
-      const step = i % 2 === 0 ? half : Math.floor(f.beat);
-      const pose = POSES[Math.floor(hash01(f.seed, i, step) * POSES.length)];
-      const bounce = Math.sin(Math.min(1, f.phase * 2) * Math.PI) * 18 * f.intensity;
-      const x = s.x + cell * (i + 0.5);
-      const y = s.y + s.h * 0.38 - bounce + (i % 2) * 8;
-      ctx.fillStyle = i === f.beatInBar % n ? GREEN_HOT : GREEN;
-      for (let r = 0; r < 3; r++) ctx.fillText(pose[r], x, y + r * size * 1.05);
+    const k = begin(ctx, f, env);
+    const t = k.t;
+    header(k, "C:\\PARTY> DANCE.EXE", `USERS ONLINE: 5 ■ BPM ${bpmLabel(f)}`);
+    text(k, SHOUTS[Math.floor(t / 16) % SHOUTS.length], DW / 2, 128, 62,
+         { align: "center", spacing: 3, alpha: k.reduced ? 0.9 : (t % 4 === 0 ? 1 : 0.7) });
+    const bar = Math.floor(t / 8);
+    const slot = (DW - 112) / 5;
+    for (let i = 0; i < 5; i++) {
+      const seq = MOVES[(i + bar) % MOVES.length];
+      const key = seq[(t + (i % 2) * 2) % seq.length];
+      const hop = key === "A" && k.onBeat;
+      const size = i === 2 ? 120 : 92;
+      const h = 3 * size * 0.95;
+      pre(k, F[key], 56 + slot * (i + 0.5), 522 - h + (hop ? -18 : 0), size, { lineHeight: 0.95 });
     }
-    // floor with beat-synchronous light tiles
-    const tiles = 8;
-    const tw = s.w / tiles;
-    for (let i = 0; i < tiles; i++) {
-      const on = hash01(f.seed, 50 + i, Math.floor(f.beat)) > 0.55;
-      ctx.fillStyle = on ? GREEN : GREEN_DIM;
-      ctx.globalAlpha = on ? 0.35 + 0.5 * env.guard.pulse(f.kick) * f.intensity : 0.25;
-      ctx.fillRect(s.x + i * tw + 2, s.y + s.h * 0.78, tw - 4, 22);
+    // light floor: 16 x 3 tiles
+    const gx = 56, gw = DW - 112, cw = (gw - 15 * 6) / 16;
+    for (let r = 0; r < 3; r++) {
+      for (let c = 0; c < 16; c++) {
+        const lit = (c + r + Math.floor(t / 2)) % 4 === 0 || ((c * 7 + r * 3 + t) % 11 === 0);
+        ctx.globalAlpha = lit ? (k.reduced ? 0.6 : 0.9) : 0.12;
+        ctx.fillStyle = k.phos;
+        ctx.shadowBlur = 0;
+        ctx.fillRect(gx + c * (cw + 6), 550 + r * 40, cw, 34);
+      }
     }
     ctx.globalAlpha = 1;
-    ctx.font = font(26);
-    ctx.fillStyle = GREEN;
-    ctx.fillText("DANCE.EXE", s.x + s.w / 2, s.y);
-    ctx.font = font(16);
-    ctx.fillStyle = GREEN_DIM;
-    ctx.fillText(`BAR ${f.bar}  BEAT ${f.beatInBar + 1}/${f.bpb}`, s.x + s.w / 2, s.y + s.h - 40);
-    ctx.textAlign = "left";
+    end(k);
   },
 };

@@ -88,7 +88,8 @@ def browser():
         b.close()
 
 
-SCENES = ["boot", "dance", "spectrum", "grid", "rain", "countdown"]
+SCENES = ["boot", "dance", "spectrum", "grid", "rain", "countdown", "mattliball", "guggen", "stollen",
+          "mottos", "bars", "hell"]
 
 
 @pytest.mark.parametrize("scene", SCENES + ["cal"])

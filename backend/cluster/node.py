@@ -783,7 +783,7 @@ class ClusterNode:
             "sync": {"uncertainty_ms": _r(st.uncertainty_ms), "jitter_ms": _r(st.jitter_ms), "synced": st.synced},
             "audio_fresh": feat_age is not None and feat_age < FEATURES_STALE_S,
             "scenes": {"intensity": sh.scenes.intensity, "countdown_target": sh.scenes.countdown_target,
-                       "countdown_label": sh.scenes.countdown_label},
+                       "countdown_label": sh.scenes.countdown_label, "phosphor": sh.scenes.phosphor},
             "safety": sh.safety.model_dump(),
             "display": sh.display.model_dump(),
             "cal": cal,

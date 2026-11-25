@@ -26,7 +26,8 @@ ETC_DIR = Path(os.environ.get("PHOSPHOR_ETC", "/etc/phosphor2000"))
 STATE_DIR = Path(os.environ.get("PHOSPHOR_STATE", "/var/lib/phosphor2000"))
 
 NODE_ID_RE = re.compile(r"^pi-0[1-9]$")
-SCENES = ("boot", "dance", "spectrum", "grid", "rain", "countdown", "calibration")
+SCENES = ("boot", "dance", "spectrum", "grid", "rain", "countdown", "mattliball", "guggen", "stollen",
+          "mottos", "bars", "hell", "calibration")
 PLAYABLE_SCENES = SCENES[:-1]
 
 
@@ -156,9 +157,10 @@ class ScenesConfig(Strict):
     playlist: list[PlaylistItem] = Field(default_factory=lambda: [PlaylistItem(scene="boot", bars=8)])
     individual: dict[str, IndividualAssignment] = {}
     choreography: list[ChoreoStep] = []
-    countdown_target: str = "2027-01-01T00:00:00"
-    countdown_label: str = Field("Y2K+27", max_length=24)
+    countdown_target: str = Field("2027-02-05T20:00:00", pattern=r"^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}(:\d{2})?)?$")
+    countdown_label: str = Field("MATTLIBALL", max_length=24)
     intensity: float = Field(0.8, ge=0.0, le=1.0)
+    phosphor: str = Field("#39ff14", pattern=r"^#[0-9a-fA-F]{6}$")  # P1 green; amber #ffb000, blue #7dd3fc, white #e8f4ff
 
     @field_validator("playlist")
     @classmethod
@@ -213,6 +215,9 @@ class DisplayConfig(Strict):
     virtual_height: int = 480
     overscan: Overscan = Overscan()
     fps_cap: int = Field(25, ge=5, le=60)
+    glow: int = Field(1, ge=0, le=2)          # phosphor glow (canvas shadowBlur): 0 off, 1 light, 2 strong
+    crt_overlay: bool = True                  # scanlines + vignette
+    hud: bool = False                         # small status line (always shown in abnormal states)
 
 
 class AudioConfig(Strict):

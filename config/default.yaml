@@ -68,18 +68,26 @@ scenes:
   playlist:
     - { scene: boot, bars: 8 }
     - { scene: dance, bars: 16 }
-    - { scene: spectrum, bars: 16 }
+    - { scene: spectrum, bars: 8 }
+    - { scene: mattliball, bars: 8 }
     - { scene: grid, bars: 16 }
+    - { scene: guggen, bars: 8 }
     - { scene: rain, bars: 16 }
-    - { scene: countdown, bars: 8 }
+    - { scene: mottos, bars: 16 }
+    - { scene: stollen, bars: 8 }
+    - { scene: countdown, bars: 16 }
+    - { scene: bars, bars: 8 }
+    - { scene: hell, bars: 8 }
   individual: {}               # node_id -> {scene: name} or {playlist: [...], rotate: n}
   choreography:                # list of steps; each maps node -> scene ("*" = default)
     - { bars: 8, assign: { "*": dance } }
-    - { bars: 8, pattern: rotate, scenes: [rain, grid, spectrum, dance, countdown] }
-    - { bars: 8, pattern: alternate, scenes: [spectrum, rain] }
-  countdown_target: "2027-01-01T00:00:00"
-  countdown_label: "Y2K+27"
+    - { bars: 8, pattern: rotate, scenes: [rain, grid, spectrum, guggen, stollen] }
+    - { bars: 8, pattern: alternate, scenes: [mattliball, mottos] }
+    - { bars: 8, pattern: wave, scenes: [stollen, grid] }
+  countdown_target: "2027-02-05T20:00:00"   # Mattliball scene: T-MINUS n TAGE
+  countdown_label: "MATTLIBALL"
   intensity: 0.8               # 0..1 global visual intensity
+  phosphor: "#39ff14"          # P1 green; amber #ffb000, blue #7dd3fc, white #e8f4ff
 
 safety:
   reduced_flashing: false
@@ -99,6 +107,9 @@ display:
   virtual_height: 480
   overscan: { top: 0.06, bottom: 0.06, left: 0.07, right: 0.07 }
   fps_cap: 25                  # PAL: 50 fields/s -> 25 full frames/s
+  glow: 1                      # 0 off, 1 light, 2 strong (cost: canvas shadowBlur, benchmark on the Pi!)
+  crt_overlay: true            # scanlines + vignette
+  hud: false                   # status line; always shown in abnormal network states
 
 audio:
   enabled: auto                # auto = only if a USB capture device exists

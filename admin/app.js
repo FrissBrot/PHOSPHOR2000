@@ -1,7 +1,7 @@
 // PHOSPHOR2000 admin dashboard. Vanilla JS, no external resources.
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
-const SCENES = ["boot", "dance", "spectrum", "grid", "rain", "countdown"];
+const SCENES = ["boot", "dance", "spectrum", "grid", "rain", "countdown", "mattliball", "guggen", "stollen", "mottos", "bars", "hell"];
 let S = null;            // latest status
 let ws = null;
 let clusterOffset = null; // cluster seconds - performance.now()/1000 (admin browser)
@@ -182,6 +182,11 @@ function renderScenes() {
     ? "overrides: " + S.schedule.overrides.map((o) => `${o.scene}@${o.start_beat}${o.end_beat ? "-" + o.end_beat : "+"}${o.targets ? " " + o.targets.join(",") : ""}`).join("  ")
     : "no overrides";
   if (document.activeElement !== $("#intensity")) $("#intensity").value = sc.intensity;
+  const d = S.shared.display;
+  if (!$("#lookSave").dataset.touched) {
+    $("#phosphor").value = sc.phosphor; $("#glow").value = String(d.glow);
+    $("#overlay").checked = d.crt_overlay; $("#hud").checked = d.hud;
+  }
 }
 
 function loadProgramme() {
@@ -219,6 +224,11 @@ $("#choreoSave").addEventListener("click", () => {
   cmd("set_shared", { patch: { scenes: { choreography: c } } }).then(() => toast("choreography applied", true));
 });
 $("#clearScene").addEventListener("click", () => cmd("clear_scene", { quantize: $("#quant").value }));
+["#phosphor", "#glow", "#overlay", "#hud"].forEach((id) => $(id).addEventListener("change", () => ($("#lookSave").dataset.touched = "1")));
+$("#lookSave").addEventListener("click", () => cmd("set_shared", { patch: {
+  scenes: { phosphor: $("#phosphor").value },
+  display: { glow: parseInt($("#glow").value, 10), crt_overlay: $("#overlay").checked, hud: $("#hud").checked } } })
+  .then(() => { delete $("#lookSave").dataset.touched; toast("look saved", true); }));
 $("#intensity").addEventListener("change", (e) => cmd("set_shared", { patch: { scenes: { intensity: parseFloat(e.target.value) } } }));
 $("#cdSave").addEventListener("click", () => cmd("set_shared", { patch: { scenes: { countdown_target: $("#cdTarget").value, countdown_label: $("#cdLabel").value } } }));
 
