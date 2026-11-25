@@ -1,0 +1,8 @@
+# Pinned runtime dependencies for the Pi (aarch64 wheels on PyPI; armhf via piwheels).
+fastapi==0.165.0
+uvicorn==0.54.0
+websockets==17.4
+pydantic==2.14.4
+PyYAML==6.0.4
+numpy==2.4.6
+sounddevice==0.5.2

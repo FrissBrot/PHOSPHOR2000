@@ -1,7 +1,8 @@
 """Whitelisted system actions. No shell, no user-supplied argv.
 
-The core runs as the unprivileged user ``cyberspace``. scripts/install.sh adds
-a sudoers drop-in that allows exactly the argv lists below (and nothing else).
+The core runs as the unprivileged user ``cyberspace`` with NoNewPrivileges.
+scripts/install.sh installs a polkit rule (systemd/50-cyberspace.rules) that
+lets exactly this user restart exactly these units and reboot — nothing else.
 """
 from __future__ import annotations
 
@@ -14,10 +15,10 @@ from pathlib import Path
 log = logging.getLogger("cs2k.system")
 
 ACTIONS: dict[str, list[str]] = {
-    "renderer": ["/usr/bin/sudo", "-n", "/usr/bin/systemctl", "restart", "cyberspace-renderer.service"],
-    "audio": ["/usr/bin/sudo", "-n", "/usr/bin/systemctl", "restart", "cyberspace-audio.service"],
-    "core": ["/usr/bin/sudo", "-n", "/usr/bin/systemctl", "restart", "cyberspace-core.service"],
-    "reboot": ["/usr/bin/sudo", "-n", "/usr/bin/systemctl", "reboot"],
+    "renderer": ["/usr/bin/systemctl", "--no-ask-password", "restart", "cyberspace-renderer.service"],
+    "audio": ["/usr/bin/systemctl", "--no-ask-password", "restart", "cyberspace-audio.service"],
+    "core": ["/usr/bin/systemctl", "--no-ask-password", "restart", "cyberspace-core.service"],
+    "reboot": ["/usr/bin/systemctl", "--no-ask-password", "reboot"],
 }
 
 

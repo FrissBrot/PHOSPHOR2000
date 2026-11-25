@@ -1,0 +1,25 @@
+[Unit]
+Description=CYBERSPACE 2000 audio engine (USB line-in beat tracking)
+After=cyberspace-core.service sound.target
+PartOf=cyberspace.target
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+User=cyberspace
+Group=cyberspace
+SupplementaryGroups=audio
+WorkingDirectory=/opt/cyberspace2000
+Environment=PYTHONUNBUFFERED=1 CYBERSPACE_ETC=/etc/cyberspace2000 CYBERSPACE_RUN=/run/cyberspace2000
+ExecStart=/opt/cyberspace2000/venv/bin/python -m backend.audio.service
+Restart=always
+RestartSec=3
+Nice=-10
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+ReadWritePaths=/run/cyberspace2000
+
+[Install]
+WantedBy=cyberspace.target

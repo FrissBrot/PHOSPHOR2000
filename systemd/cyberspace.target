@@ -1,0 +1,7 @@
+[Unit]
+Description=CYBERSPACE 2000 (all services)
+Wants=cyberspace-core.service cyberspace-audio.service cyberspace-input.service cyberspace-renderer.service
+After=network.target
+
+[Install]
+WantedBy=multi-user.target

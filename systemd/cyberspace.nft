@@ -1,0 +1,14 @@
+# Only the cluster subnet and loopback may reach the dashboard (8080/tcp) and the
+# HMAC-authenticated cluster port (47800/udp). Separate table: other rules untouched.
+table inet cyberspace
+delete table inet cyberspace
+table inet cyberspace {
+  chain input {
+    type filter hook input priority 0; policy accept;
+    iif "lo" accept
+    tcp dport 8080 ip saddr != 192.168.50.0/24 drop
+    udp dport 47800 ip saddr != 192.168.50.0/24 drop
+    tcp dport 8080 meta nfproto ipv6 drop
+    udp dport 47800 meta nfproto ipv6 drop
+  }
+}
