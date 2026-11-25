@@ -29,6 +29,7 @@
     <button data-tab="scenes">Scenes</button>
     <button data-tab="calib">Calibration</button>
     <button data-tab="config">Config</button>
+    <button data-tab="system">Updates</button>
     <button data-tab="logs">Logs</button>
   </nav>
 
@@ -164,6 +165,35 @@
         <button id="countrySave">apply on all Pis</button>
         <span class="hint">regulatory domain for the PHOSPHOR2000 hotspot; applied immediately and kept after reboot</span></div>
       <p id="cfgMsg" class="msg"></p>
+    </div>
+  </section>
+
+  <section data-panel="system" class="panel hidden">
+    <div class="card">
+      <h3>Software versions</h3>
+      <table id="verTable"></table>
+      <p id="rolloutMsg" class="sub"></p>
+      <div class="row wrap">
+        <button id="updCheck" class="ghost">check GitHub</button>
+        <button id="updSelf">update this Pi from GitHub</button>
+        <button id="updRollout">roll out newest version to all Pis</button>
+        <button id="updCancel" class="ghost">stop rollout</button>
+      </div>
+      <p id="ghMsg" class="sub"></p>
+      <p class="hint">How it works: a Pi with internet (Ethernet, phone hotspot at home…) fetches the new version from
+        GitHub; then <b>roll out</b> copies it inside the offline cluster to all other Pis, one after the other
+        (leader last). Each Pi checks the download, installs, restarts its services (~10 s, the CRT keeps showing its
+        animation) and rolls back by itself if it does not come up healthy. Avoid rollouts during the show.</p>
+    </div>
+    <div class="card">
+      <h3>Automatic updates</h3>
+      <div class="row wrap">
+        <label class="chk"><input id="autoUpd" type="checkbox"> update automatically</label>
+        <label class="chk"><input id="idleOnly" type="checkbox"> only when no live music</label>
+        <label>for at least <input id="idleMin" type="number" min="1" max="1440"> min</label>
+        <label>GitHub check every <input id="ghHours" type="number" min="0.5" max="168" step="0.5"> h</label>
+        <button id="autoSave">save</button>
+      </div>
     </div>
   </section>
 

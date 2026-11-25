@@ -58,6 +58,8 @@ The installer (idempotent; re-run it any time):
    Wi-Fi power save off
 6. `configure-crt.sh`: backups, composite PAL 720×576i 4:3, console blanking off
 7. `configure-kiosk.sh`: cage + Chromium on tty1, getty@tty1 masked
+8. `configure-robustness.sh`: hardware watchdog, journal/Chromium in RAM, no swap
+   (`--readonly` for a read-only root file system)
 
 Options: `--no-network` (external network mode), `--no-crt`, `--no-kiosk`, `--firewall`,
 `--disable-other-wifi` (recommended if the Pi has a home Wi-Fi profile with autoconnect),
@@ -90,10 +92,10 @@ card listed on the audio Pi, keyboard listed where plugged.
 
 ## 6. Updating
 
-```bash
-cd PHOSPHOR2000 && git pull && sudo scripts/install.sh --node-id pi-0N --country DE
-```
-(secrets and offsets are kept). Do it on one Pi at a time; the others keep running.
+From the dashboard (Updates tab): one Pi with internet fetches the new version from GitHub, then
+*roll out* copies it to all other Pis inside the offline cluster, one by one, with health check
+and automatic rollback. Details: [updates-and-robustness.md](updates-and-robustness.md).
+Re-running `install.sh` from a fresh checkout also works and keeps secrets and offsets.
 
 ## 7. Uninstall / rollback
 

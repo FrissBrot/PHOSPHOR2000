@@ -198,6 +198,9 @@ class Core:
         self.next_renderer_restart = 0.0
         self.overlay = overlay_root_active()
         self.persisted_key: tuple | None = None
+        from backend.update import Updater
+        self.updater = Updater(self, RUN_DIR)
+        self.node.on_update_message = self.updater.on_message
         self.persist_due: float | None = None
         if cfg.network.manage and not safe_mode():
             self.node.on_wifi_country = set_wifi_country
@@ -314,6 +317,10 @@ class Core:
             if self.node.dirty and time.monotonic() - self.cache.last_write > 10.0:
                 self.persist()
             self.renderer_watchdog(now)
+            try:
+                self.updater.tick(now)
+            except Exception:
+                log.exception("updater tick failed")
             if self.persist_due is not None and now >= self.persist_due:
                 self.persist_due = None
                 request_persist()

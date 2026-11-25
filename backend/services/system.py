@@ -71,6 +71,20 @@ def request_persist() -> bool:
         return False
 
 
+def request_update() -> bool:
+    """Start the root oneshot phosphor-update.service (reads /run/phosphor2000/update-request.json)."""
+    argv = ["/usr/bin/systemctl", "--no-ask-password", "--no-block", "start", "phosphor-update.service"]
+    if os.environ.get("PHOSPHOR_DRY_RUN") == "1":
+        log.warning("dry-run: would execute %s", argv)
+        return True
+    try:
+        return subprocess.run(argv, stdin=subprocess.DEVNULL, capture_output=True, timeout=10,
+                              env={"PATH": "/usr/bin:/bin"}).returncode == 0
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        log.error("update request failed: %s", exc)
+        return False
+
+
 def run_action(what: str, dry_run: bool | None = None) -> bool:
     argv = ACTIONS.get(what)
     if argv is None:

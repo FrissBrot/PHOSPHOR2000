@@ -21,6 +21,7 @@ export class Link {
       const raw = localStorage.getItem(CACHE_KEY);
       if (!raw) return null;
       const st = JSON.parse(raw);
+      st._cached = true;
       this.clock.seedFromWall(st._cluster_minus_wall);
       return st;
     } catch (e) { return null; }

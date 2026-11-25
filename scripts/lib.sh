@@ -2,7 +2,9 @@
 # Shared helpers for PHOSPHOR2000 scripts. Source, don't execute.
 set -euo pipefail
 
-PHOS_PREFIX=${PHOS_PREFIX:-/opt/phosphor2000}
+PHOS_PREFIX=${PHOS_PREFIX:-/opt/phosphor2000}          # symlink -> current release
+PHOS_RELEASES=${PHOS_RELEASES:-/opt/phosphor2000-releases}
+PHOS_VENV=${PHOS_VENV:-/opt/phosphor2000-venv}           # shared by all releases
 PHOS_ETC=${PHOS_ETC:-/etc/phosphor2000}
 PHOS_STATE=${PHOS_STATE:-/var/lib/phosphor2000}
 PHOS_BACKUP_DIR=${PHOS_BACKUP_DIR:-$PHOS_STATE/backup}
@@ -76,4 +78,43 @@ strip_block() {
   local f=$1
   [ -f "$f" ] || return 0
   sed -i "/^$MARK_BEGIN\$/,/^$MARK_END\$/d" "$f"
+}
+
+# Version id of a source tree: <commit date UTC YYYYMMDDTHHMM>-<short sha>, sortable as a string.
+tree_version() {
+  local src=$1 v
+  if [ -f "$src/VERSION" ]; then cat "$src/VERSION"; return; fi
+  v=$(cd "$src" && TZ=UTC git log -1 --date=format-local:%Y%m%dT%H%M --format=%cd-%h 2>/dev/null) || v=""
+  [ -n "$v" ] || v="$(date -u +%Y%m%dT%H%M)-local"
+  if (cd "$src" && [ -n "$(git status --porcelain 2>/dev/null)" ]); then v="$v+mod"; fi
+  echo "$v"
+}
+
+# Atomically point $PHOS_PREFIX at a release directory (rename(2) of a symlink).
+switch_release() {
+  local rel=$1 root=${2:-}
+  ln -sfn "$rel" "$root$PHOS_PREFIX.new"
+  mv -Tf "$root$PHOS_PREFIX.new" "$root$PHOS_PREFIX"
+}
+
+# Install unit files, polkit rule and PAM file of a release (root prefix for overlay mode).
+install_system_files() {
+  local rel=$1 root=${2:-} u
+  install -d -m 0755 "$root/etc/polkit-1/rules.d" "$root/etc/systemd/system" "$root/etc/pam.d"
+  install -m 0644 "$rel/systemd/50-phosphor.rules" "$root/etc/polkit-1/rules.d/50-phosphor.rules"
+  install -m 0644 "$rel/systemd/phosphor-kiosk.pam" "$root/etc/pam.d/phosphor-kiosk"
+  for u in "$rel"/systemd/*.service "$rel"/systemd/*.target; do
+    install -m 0644 "$u" "$root/etc/systemd/system/$(basename "$u")"
+  done
+}
+
+# Keep the current, the previous and one more release; delete older ones.
+prune_releases() {
+  local root=${1:-} cur prev d
+  cur=$(readlink -f "$root$PHOS_PREFIX" 2>/dev/null || true)
+  prev=$(cat "$root$PHOS_RELEASES/PREVIOUS" 2>/dev/null || true)
+  ls -1dt "$root$PHOS_RELEASES"/*/ 2>/dev/null | tail -n +4 | while read -r d; do
+    d=${d%/}
+    [ "$d" = "$cur" ] || [ "$root$prev" = "$d" ] || [ "$prev" = "$d" ] || rm -rf "$d"
+  done
 }

@@ -20,11 +20,11 @@ rm -f /etc/systemd/system/phosphor*.service /etc/systemd/system/phosphor-country
       /etc/polkit-1/rules.d/50-phosphor.rules /usr/local/sbin/phosphor-passwd
 systemctl daemon-reload
 if [ "$PURGE" = 1 ]; then
-  rm -rf "$PHOS_ETC" "$PHOS_STATE" "$PHOS_PREFIX"
+  rm -rf "$PHOS_ETC" "$PHOS_STATE" "$PHOS_PREFIX" "$PHOS_RELEASES" "$PHOS_VENV"
   userdel phosphor 2>/dev/null || true
   c_ok "purged"
 else
-  rm -rf "$PHOS_PREFIX"
+  rm -rf "$PHOS_PREFIX" "$PHOS_RELEASES" "$PHOS_VENV"
   c_ok "removed; kept $PHOS_ETC and $PHOS_STATE (offsets, backups, logs)"
 fi
 c_info "reboot to return to the HDMI console"

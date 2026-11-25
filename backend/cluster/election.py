@@ -497,6 +497,21 @@ class Election:
         self._now = now
         s = self.state
         if s == NodeState.BOOTING:
+            # Core restart (update, crash) while the radio kept running: resume instead of
+            # tearing the network down. NetworkManager keeps the AP / association alive.
+            st = self.adapter.status()
+            if st.mode == RadioMode.AP and self.can_lead:
+                self.epoch_seen = max(self.epoch_seen, 1)
+                self.my_claim = LeaderClaim(self.epoch_seen, self.priority, self.id)
+                self.leader_since = now - self.cfg.min_leader_tenure   # a resumed leader is established
+                self.next_lone_rescan = now + self.LONE_LEADER_RESCAN
+                self._go(NodeState.LEADER, now, f"hotspot still up after restart, resuming epoch {self.epoch_seen}")
+                return
+            if st.mode == RadioMode.STATION:
+                self.boot = False
+                self._go(NodeState.RECONNECTING, now, "still associated after restart, waiting for leader beacon",
+                         now + self.BEACON_WAIT + 2)
+                return
             self._enter_discovery(now, "boot")
             return
         # pending yield (leader side) / pending handover start (target side)

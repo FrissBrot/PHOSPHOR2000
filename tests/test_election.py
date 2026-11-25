@@ -162,3 +162,18 @@ def test_follower_reports_foreign_ap_and_leader_orders_scout():
     l.on_message({"t": "foreign_ap", "_from": "pi-05", "bssids": ["EE:EE"]}, 1.5)
     order = [m for m, to in lsent if m["t"] == "scout_order"]
     assert order and order[0]["to"] == "pi-05"  # least important CRT scouts
+
+
+def test_core_restart_resumes_leader_and_follower_without_network_drop():
+    e, ad, _ = mk("pi-01")
+    e.epoch_seen = 7
+    ad.mode = RadioMode.AP
+    e.tick(0)
+    assert e.state == NodeState.LEADER and e.my_claim.epoch == 7 and "ap" not in ad.calls and "stop" not in ad.calls
+    f, fad, _ = mk("pi-03")
+    fad.mode = RadioMode.STATION
+    f.tick(0)
+    assert f.state == NodeState.RECONNECTING and not any(isinstance(c, tuple) for c in fad.calls)
+    f.on_message({"t": "beacon", "_from": "pi-01", "id": "pi-01", "prio": 100, "state": "LEADER",
+                  "claim": {"epoch": 7, "priority": 100, "node_id": "pi-01"}}, 1)
+    assert f.state == NodeState.RECOVERING

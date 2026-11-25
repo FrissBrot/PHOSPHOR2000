@@ -73,6 +73,12 @@ laptop on Ethernet with SSH to all three (`journalctl -fu phosphor-core`).
 - [ ] camera check after calibration (all-CRT flash)
 
 ### H8 Robustness
+- [ ] pull the power plug 5× during the show (incl. right after saving an offset): Pi boots, offsets kept
+- [ ] `--readonly` mode: same test; `configure-robustness.sh --status` shows overlay + watchdog
+- [ ] `sudo kill -STOP $(pgrep -f backend.services.core)`: systemd restarts the core within ~30 s
+- [ ] `sudo kill -STOP $(pgrep -o chromium)`: renderer restarted within ~1 min
+- [ ] `echo c | sudo tee /proc/sysrq-trigger` (kernel crash): hardware watchdog reboots the Pi
+- [ ] update from GitHub on one Pi, roll out to all, roll one back — all from the dashboard
 - [ ] `systemctl restart phosphor-core` on a follower: picture continues, rejoins in seconds
 - [ ] kill Chromium (`pkill chromium`): back in < 10 s on the same scene/beat
 - [ ] 8 h soak test: memory stable, no stuck states (`journalctl -p warning`)

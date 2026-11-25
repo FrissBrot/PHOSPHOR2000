@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 import logging
 import time
 from pathlib import Path
@@ -74,7 +75,8 @@ def create_app(core: "Core") -> FastAPI:
     # --------------------------------------------------------------- auth
     @app.get("/api/health")
     async def health():
-        return {"ok": True, "node": node.id, "state": node.state.value, "leader": node.election.current_leader_id()}
+        return {"ok": True, "node": node.id, "state": node.state.value, "leader": node.election.current_leader_id(),
+                "version": node.version}
 
     @app.post("/api/login")
     async def login(body: Login, request: Request, response: Response):
@@ -136,6 +138,7 @@ def create_app(core: "Core") -> FastAPI:
             "cal": {**node.cal.to_dict(), "tap_times": None},
             "transitions": [{**t.__dict__, "wall": time.time() - (now - t.at)} for t in el.transitions[-30:]],
             "safe_mode": not node.cfg.network.manage,
+            "update": upd.status() if upd else None,
         }
 
     @app.get("/api/status")
@@ -170,6 +173,68 @@ def create_app(core: "Core") -> FastAPI:
                 core.events.add_calibration(time.time(), nid, val, node.cal.result or {})
         core.persist()
         return res
+
+    # ------------------------------------------------------------- updates
+    upd = getattr(core, "updater", None)
+
+    @app.get("/api/update/status")
+    async def update_status(request: Request):
+        require(request)
+        return upd.status()
+
+    @app.post("/api/update/check")
+    async def update_check(request: Request):
+        require(request, mutating=True)
+        await asyncio.get_running_loop().run_in_executor(None, lambda: upd.check_github(blocking=True))
+        return upd.status()
+
+    def _upd(fn):
+        try:
+            return fn()
+        except (RuntimeError, ValueError) as exc:
+            raise HTTPException(409, str(exc))
+
+    @app.post("/api/update/self")
+    async def update_self(request: Request):
+        """Update THIS Pi from GitHub (needs internet on this Pi)."""
+        require(request, mutating=True)
+        _upd(upd.update_self_github)
+        return {"ok": True, "message": "update started on " + node.id}
+
+    @app.post("/api/update/rollout")
+    async def update_rollout(request: Request):
+        require(request, mutating=True)
+        loop = asyncio.get_running_loop()
+        r = await loop.run_in_executor(None, lambda: _upd(lambda: upd.start_rollout(time.monotonic())))
+        return {"ok": True, "rollout": r}
+
+    @app.post("/api/update/cancel")
+    async def update_cancel(request: Request):
+        require(request, mutating=True)
+        upd.cancel_rollout()
+        return {"ok": True}
+
+    @app.post("/api/update/rollback/{target}")
+    async def update_rollback(target: str, request: Request):
+        require(request, mutating=True)
+        if not re.fullmatch(r"pi-0[1-9]", target):
+            raise HTTPException(422, "bad node id")
+        _upd(lambda: upd.rollback_node(target))
+        return {"ok": True}
+
+    @app.get("/api/update/manifest")
+    async def update_manifest(sig: str = ""):
+        # other Pis only: authenticated with the cluster key
+        if not upd.check_sig("manifest", sig):
+            raise HTTPException(403, "forbidden")
+        return await asyncio.get_running_loop().run_in_executor(None, upd.manifest)
+
+    @app.get("/api/update/bundle")
+    async def update_bundle(v: str = "", sig: str = ""):
+        if not upd.check_sig("bundle|" + v, sig) or v != node.version:
+            raise HTTPException(403 if not upd.check_sig("bundle|" + v, sig) else 404, "not available")
+        path, sha = await asyncio.get_running_loop().run_in_executor(None, upd.bundle)
+        return FileResponse(path, media_type="application/gzip", headers={"X-SHA256": sha})
 
     @app.get("/api/config/export")
     async def export_config(request: Request):

@@ -1,0 +1,9 @@
+# Software update requested from the dashboard (request file written by the core).
+[Unit]
+Description=PHOSPHOR2000 software update
+After=network.target
+
+[Service]
+Type=oneshot
+ExecStart=/opt/phosphor2000/scripts/update.sh --request /run/phosphor2000/update-request.json
+TimeoutStartSec=900

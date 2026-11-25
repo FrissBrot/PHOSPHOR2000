@@ -83,15 +83,29 @@ install -d -m 0750 -o root -g phosphor "$PHOS_ETC"
 install -d -m 0750 -o phosphor -g phosphor "$PHOS_STATE"
 install -d -m 0700 -o root -g root "$PHOS_BACKUP_DIR"
 
-c_info "3/9 application files -> $PHOS_PREFIX"
+VER=$(tree_version "$SRC")
+REL="$PHOS_RELEASES/$VER"
+c_info "3/9 application files -> $REL (release $VER)"
+install -d -m 0755 "$PHOS_RELEASES"
+# migrate the old single-directory layout (before releases existed)
+if [ -d "$PHOS_PREFIX" ] && [ ! -L "$PHOS_PREFIX" ]; then
+  [ -d "$PHOS_VENV" ] || { [ -d "$PHOS_PREFIX/venv" ] && mv "$PHOS_PREFIX/venv" "$PHOS_VENV"; }
+  rm -rf "$PHOS_PREFIX"
+fi
+install -d -m 0755 "$REL"
 run rsync -a --delete --exclude .git --exclude .venv --exclude venv --exclude __pycache__ --exclude node_modules \
-  "$SRC/" "$PHOS_PREFIX/"
-[ -d "$PHOS_PREFIX/venv" ] || run python3 -m venv --system-site-packages "$PHOS_PREFIX/venv"
-run "$PHOS_PREFIX/venv/bin/pip" install --disable-pip-version-check -q -r "$PHOS_PREFIX/requirements-pi.txt"
-chmod +x "$PHOS_PREFIX"/scripts/*.sh
-# version shown per Pi in the dashboard (detects Pis running different software)
-( cd "$SRC" && git rev-parse --short HEAD 2>/dev/null || echo "unknown" ) | tr -d '\n' > "$PHOS_PREFIX/VERSION"
-( cd "$SRC" && [ -z "$(git status --porcelain 2>/dev/null)" ] || printf '+mod' ) >> "$PHOS_PREFIX/VERSION" || true
+  "$SRC/" "$REL/"
+echo "$VER" > "$REL/VERSION"     # version shown per Pi in the dashboard
+[ -d "$PHOS_VENV" ] || run python3 -m venv --system-site-packages "$PHOS_VENV"
+run "$PHOS_VENV/bin/pip" install --disable-pip-version-check -q -r "$REL/requirements-pi.txt"
+sha256sum "$REL/requirements-pi.txt" | cut -d' ' -f1 > "$PHOS_VENV/.requirements.sha256"
+ln -sfn "$PHOS_VENV" "$REL/venv"
+chmod +x "$REL"/scripts/*.sh
+if [ -L "$PHOS_PREFIX" ] && [ "$(readlink -f "$PHOS_PREFIX")" != "$REL" ]; then
+  readlink -f "$PHOS_PREFIX" > "$PHOS_RELEASES/PREVIOUS"
+fi
+switch_release "$REL"
+prune_releases
 
 c_info "4/9 node identity and secrets"
 if [ ! -f "$PHOS_ETC/node.yaml" ] || ! grep -q "id: $NODE_ID" "$PHOS_ETC/node.yaml"; then
@@ -146,12 +160,7 @@ if ! grep -q '^admin_password_hash:' "$SECF"; then
 fi
 
 c_info "5/9 polkit + systemd units"
-install -d -m 0755 /etc/polkit-1/rules.d
-install -m 0644 "$PHOS_PREFIX/systemd/50-phosphor.rules" /etc/polkit-1/rules.d/50-phosphor.rules
-for u in phosphor.target phosphor-core.service phosphor-audio.service phosphor-input.service \
-         phosphor-renderer.service phosphor-firewall.service phosphor-country@.service phosphor-persist.service; do
-  install -m 0644 "$PHOS_PREFIX/systemd/$u" "/etc/systemd/system/$u"
-done
+install_system_files "$PHOS_PREFIX"
 run systemctl daemon-reload
 run systemctl enable phosphor.target phosphor-core.service phosphor-audio.service phosphor-input.service
 if [ "$FIREWALL" = 1 ]; then run systemctl enable --now phosphor-firewall.service; fi

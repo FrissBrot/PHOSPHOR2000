@@ -9,7 +9,8 @@ polkit.addRule(function(action, subject) {
     var ok = ["phosphor-renderer.service", "phosphor-audio.service", "phosphor-core.service"];
     if (ok.indexOf(unit) >= 0 && verb == "restart") return polkit.Result.YES;
     if (verb == "start" && /^phosphor-country@[A-Z][A-Z]\.service$/.test(unit)) return polkit.Result.YES;
-    if (verb == "start" && unit == "phosphor-persist.service") return polkit.Result.YES;
+    if (verb == "start" && (unit == "phosphor-persist.service" || unit == "phosphor-update.service"))
+      return polkit.Result.YES;
   }
   if (action.id == "org.freedesktop.login1.reboot" ||
       action.id == "org.freedesktop.login1.reboot-multiple-sessions") return polkit.Result.YES;

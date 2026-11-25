@@ -239,9 +239,24 @@ class SiteConfig(Strict):
     wifi_country: str = Field("", pattern=r"^([A-Z]{2})?$")
 
 
+class UpdatePolicy(Strict):
+    auto: bool = False                 # Pis update themselves (GitHub check + cluster rollout)
+    only_when_idle: bool = True        # ... but only when no LIVE music for idle_minutes
+    idle_minutes: int = Field(10, ge=1, le=1440)
+    github_check_hours: float = Field(6.0, ge=0.5, le=168)
+
+
+class UpdateSource(Strict):
+    # Local (root-owned node.yaml), deliberately NOT editable from the dashboard: it decides which
+    # code root installs. Public GitHub repository and branch.
+    repo: str = Field("FrissBrot/PHOSPHOR2000", pattern=r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
+    branch: str = Field("main", pattern=r"^[A-Za-z0-9_./-]{1,100}$")
+
+
 class SharedConfig(Strict):
     """The replicated, revisioned part of the configuration."""
 
+    update: UpdatePolicy = UpdatePolicy()
     site: SiteConfig = SiteConfig()
     scenes: ScenesConfig = ScenesConfig()
     safety: SafetyConfig = SafetyConfig()
@@ -275,11 +290,14 @@ class AppConfig(Strict):
     calibration: CalibrationConfig = CalibrationConfig()
     display: DisplayConfig = DisplayConfig()
     site: SiteConfig = SiteConfig()
+    update: UpdatePolicy = UpdatePolicy()
+    update_source: UpdateSource = UpdateSource()
     audio: AudioConfig = AudioConfig()
     secrets: Secrets = Secrets()
 
     def shared(self) -> SharedConfig:
         return SharedConfig(
+            update=self.update,
             site=self.site,
             scenes=self.scenes,
             safety=self.safety,
@@ -291,6 +309,7 @@ class AppConfig(Strict):
     def with_shared(self, shared: SharedConfig) -> "AppConfig":
         return self.model_copy(
             update={
+                "update": shared.update,
                 "site": shared.site,
                 "scenes": shared.scenes,
                 "safety": shared.safety,

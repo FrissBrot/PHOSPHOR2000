@@ -408,6 +408,10 @@ class ClusterNode:
             if self.is_leader():
                 self._cal_tap(float(m["cluster"]), int(m.get("value", 1)), local)
             return
+        if t in ("update_cmd", "update_rollback"):
+            if self.on_update_message:
+                self.on_update_message(m, local)
+            return
         if t == "restart_req":
             if m.get("to") == self.id and self.on_restart_request:
                 self.on_restart_request(m.get("what", "renderer"))
@@ -417,6 +421,7 @@ class ClusterNode:
     on_restart_request: Callable[[str], None] | None = None
     now_fn: Callable[[], float] | None = None   # real runtime: time.monotonic (simulation: None)
     on_wifi_country: Callable[[str], bool] | None = None
+    on_update_message: Callable[[dict, float], None] | None = None
     applied_country: str | None = None
 
     def _apply_site(self) -> None:
@@ -842,6 +847,7 @@ class ClusterNode:
             "safety": sh.safety.model_dump(),
             "display": sh.display.model_dump(),
             "cal": cal,
+            "version": self.version,
             "alerts": self.alerts(local),
         }
 

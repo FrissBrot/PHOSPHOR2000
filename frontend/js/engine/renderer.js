@@ -43,6 +43,11 @@ export class Renderer {
   }
 
   setState(st) {
+    // New software installed on this Pi: reload the page (1-2 s) instead of restarting the kiosk.
+    if (st.version && !st._cached) {
+      if (this.version && st.version !== this.version) { location.reload(); return; }
+      this.version = st.version;
+    }
     this.state = st;
     this.timeline = new Timeline(st.timeline);
     this.guard.configure(st.safety);

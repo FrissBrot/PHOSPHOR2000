@@ -88,8 +88,24 @@ class NmcliAdapter(NetworkAdapter):
         self._expected: RadioMode = RadioMode.IDLE
         self._lock = threading.Lock()
         self._stop = threading.Event()
+        self._probe_initial()
         self._thread = threading.Thread(target=self._worker, name="nmcli", daemon=True)
         self._thread.start()
+
+    def _probe_initial(self) -> None:
+        """After a core restart the AP or station connection may still be active: report it so
+        the election can resume instead of dropping the network."""
+        try:
+            conn = self._active_connection()
+        except Exception:
+            return
+        if conn == self.cfg.ap_connection:
+            self._expected = RadioMode.AP
+            self._set(RadioMode.AP, self._own_mac(), self.cfg.gateway)
+        elif conn == self.cfg.sta_connection:
+            bssid, ip = self._station_info()
+            self._expected = RadioMode.STATION
+            self._set(RadioMode.STATION, bssid, ip)
 
     # ---- public API (non-blocking) ----------------------------------------
     def request_scan(self) -> None:

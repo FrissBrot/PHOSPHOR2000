@@ -95,7 +95,7 @@ function render() {
   $("#hdr").append(el("span", {}, "node "), el("b", {}, S.node), el("span", {}, `  ${S.state}  leader `),
     el("b", {}, S.leader || "none"), el("span", {}, `  epoch ${S.epoch}  ${wall.toLocaleTimeString()}`),
     S.is_leader ? "" : el("span", { class: "sub" }, "  (commands are forwarded to the leader)"));
-  renderNodes(); renderTiming(); renderScenes(); renderCal(); renderConfig();
+  renderNodes(); renderTiming(); renderScenes(); renderCal(); renderConfig(); renderUpdates();
   $("#transitions").textContent = S.transitions.map((t) => `${new Date(t.wall * 1000).toLocaleTimeString()}  ${t.old} → ${t.new}  (${t.reason})`).join("\n");
 }
 
@@ -347,6 +347,47 @@ $("#importFile").addEventListener("change", async (ev) => {
   ev.target.value = "";
 });
 $("#setTime").addEventListener("click", () => confirm(`Set cluster clock to ${new Date().toString()}?`) && cmd("set_wall_time", { unix: Date.now() / 1000 }));
+
+// ---------------------------------------------------------------- updates
+function renderUpdates() {
+  const u = S.update;
+  if (!u) return;
+  const t = $("#verTable"); t.innerHTML = "";
+  t.append(el("tr", {}, ...["Pi", "state", "version", ""].map((h) => el("th", {}, h))));
+  for (const id of Object.keys(S.nodes).sort()) {
+    const n = S.nodes[id];
+    const v = n.version || n.ver || "?";
+    const tr = el("tr", {}, el("td", {}, id + (n.self ? " *" : "")), el("td", {}, n.state || "?"),
+      el("td", { class: v === u.newest ? "ok" : "warn" }, v + (v === u.newest ? "" : "  (older)")),
+      el("td", {}, el("button", { class: "ghost", onclick: () => confirm(`Roll ${id} back to its previous version?`) &&
+        api(`/api/update/rollback/${id}`, {}).then(() => toast("rollback requested", true)) }, "roll back")));
+    t.append(tr);
+  }
+  const r = u.rollout, j = u.job || {};
+  const parts = [];
+  if (j.state) parts.push(`this Pi: ${j.state} — ${j.message || ""}`);
+  if (r) parts.push(`rollout ${r.state}: ${r.message || ""}${r.done && r.done.length ? " (done: " + r.done.join(", ") + ")" : ""}`);
+  parts.push(u.idle ? "no live music right now" : "LIVE music detected (automatic updates wait)");
+  $("#rolloutMsg").textContent = parts.join("  ·  ");
+  const g = u.github || {};
+  $("#ghMsg").textContent = g.checked_at ? (g.error ? g.error : `GitHub: ${g.version} — ${g.message}${g.newer ? "  (newer than the cluster)" : "  (cluster is up to date)"}`) : "GitHub not checked yet";
+  const p = u.policy;
+  if (!$("#autoSave").dataset.touched) {
+    $("#autoUpd").checked = p.auto; $("#idleOnly").checked = p.only_when_idle;
+    $("#idleMin").value = p.idle_minutes; $("#ghHours").value = p.github_check_hours;
+  }
+}
+$("#updCheck").addEventListener("click", () => api("/api/update/check", {}).then(() => toast("checked", true)));
+$("#updSelf").addEventListener("click", () => confirm("Download the newest version from GitHub onto THIS Pi?") &&
+  api("/api/update/self", {}).then((r) => toast(r.message, true)));
+$("#updRollout").addEventListener("click", () => confirm("Roll the newest version out to all Pis now?") &&
+  api("/api/update/rollout", {}).then(() => toast("rollout started", true)));
+$("#updCancel").addEventListener("click", () => api("/api/update/cancel", {}));
+["#autoUpd", "#idleOnly", "#idleMin", "#ghHours"].forEach((id) => $(id).addEventListener("change", () => ($("#autoSave").dataset.touched = "1")));
+$("#autoSave").addEventListener("click", () => cmd("set_shared", { patch: { update: {
+  auto: $("#autoUpd").checked, only_when_idle: $("#idleOnly").checked,
+  idle_minutes: parseInt($("#idleMin").value, 10), github_check_hours: parseFloat($("#ghHours").value) } } })
+  .then(() => { delete $("#autoSave").dataset.touched; toast("update policy saved", true); }));
 
 // ------------------------------------------------------------------- logs
 async function loadLogs() {
