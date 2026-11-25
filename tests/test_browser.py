@@ -18,6 +18,7 @@ import pytest
 
 pw = pytest.importorskip("playwright.sync_api")
 
+ADMIN_PW = "test-password-123"
 OUT = Path(os.environ.get("CS2K_ARTIFACTS", "/tmp/cs2k-artifacts"))
 
 
@@ -34,6 +35,7 @@ def server(tmp_path_factory):
     import uvicorn
 
     from backend.api.app import create_app
+    from backend.api.auth import hash_password
     from backend.config import load_config
     from backend.network.base import ExternalNetworkAdapter
     from backend.services.core import Core
@@ -42,7 +44,8 @@ def server(tmp_path_factory):
     port = free_port()
     cfg = load_config(node_path=tmp / "n.yaml", secrets_path=tmp / "s.yaml",
                       overrides={"node": {"id": "pi-01"}, "network": {"discovery_window": 0.5, "backoff_jitter": 0},
-                                 "server": {"port": port}})
+                                 "server": {"port": port},
+                                 "secrets": {"admin_password_hash": hash_password(ADMIN_PW)}})
     core = Core(cfg, adapter=ExternalNetworkAdapter(), state_dir=tmp, has_audio=False)
     app = create_app(core)
     srv = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning", lifespan="off"))
@@ -153,3 +156,41 @@ def test_benchmark_scenes_throttled(server, browser):
     page.close()
     for scene, r in res.items():
         assert r["draw_ms_p50"] < 40, (scene, r)  # 25 fps budget = 40 ms per frame
+
+
+def test_admin_dashboard(server, browser):
+    base, core = server
+    page = browser.new_page(viewport={"width": 1200, "height": 900})
+    errors: list[str] = []
+    page.on("pageerror", lambda e: errors.append(str(e)))
+    page.on("console", lambda m: m.type == "error" and errors.append(m.text))
+    page.goto(base + "/admin/")
+    page.fill("#pw", ADMIN_PW)
+    page.click("#loginForm button")
+    page.wait_for_selector("#nodes tr:nth-child(2)", timeout=10000)
+    page.screenshot(path=str(OUT / "admin-cluster.png"))
+    page.click("[data-tab=timing]")
+    page.fill("#bpmIn", "126")
+    page.click("#bpmSet")
+    page.wait_for_timeout(800)
+    assert abs(core.node.timeline.bpm - 126) < 1e-6
+    page.click("[data-tab=calib]")
+    page.click("#calStart")
+    page.wait_for_timeout(1500)
+    for _ in range(4):
+        page.keyboard.press("Enter")
+        page.wait_for_timeout(500)
+    page.wait_for_timeout(800)
+    assert core.node.cal.active and len(core.node.cal.taps) >= 3
+    page.click("[data-adj='-5']")
+    page.wait_for_timeout(500)
+    assert core.node.cal.trial_offset_ms == -5
+    page.screenshot(path=str(OUT / "admin-calibration.png"))
+    page.click("#calCancel")
+    page.click("[data-tab=scenes]")
+    page.click("#sceneBtns button:nth-child(5)")  # rain
+    page.wait_for_timeout(500)
+    assert core.node.schedule.overrides[-1].scene == "rain"
+    page.screenshot(path=str(OUT / "admin-scenes.png"))
+    page.close()
+    assert not [e for e in errors if "401" not in e], errors

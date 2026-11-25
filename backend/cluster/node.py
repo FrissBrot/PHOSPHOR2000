@@ -680,6 +680,7 @@ class ClusterNode:
         self.offset_versions[nid] = [int(self.wall_clock() * 1000), self.id]
         self._set_shared(replace_calibration(self.shared, offsets_ms=offs), local, f"calibration saved {nid}={val} ms")
         self.cal.started_offset_ms = val
+        self.cal.trial_offset_ms = val
         self.cal.rev += 1
         return {"saved": {nid: val}}
 

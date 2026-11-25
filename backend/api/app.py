@@ -133,7 +133,7 @@ def create_app(core: "Core") -> FastAPI:
             "schedule": {"revision": node.schedule.revision,
                          "overrides": [o.to_dict() for o in node.schedule.overrides]},
             "cal": {**node.cal.to_dict(), "tap_times": None},
-            "transitions": [t.__dict__ for t in el.transitions[-30:]],
+            "transitions": [{**t.__dict__, "wall": time.time() - (now - t.at)} for t in el.transitions[-30:]],
             "safe_mode": not node.cfg.network.manage,
         }
 

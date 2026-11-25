@@ -1,1 +1,166 @@
-<!doctype html><title>admin</title>
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CYBERSPACE 2000 — Control</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <div class="brand">CYBERSPACE<span>2000</span></div>
+  <div id="hdr" class="hdr"></div>
+  <button id="logout" class="ghost hidden">logout</button>
+</header>
+
+<section id="login" class="card hidden">
+  <h2>Admin login</h2>
+  <form id="loginForm">
+    <input id="pw" type="password" autocomplete="current-password" placeholder="password" required>
+    <button type="submit">login</button>
+  </form>
+  <p id="loginMsg" class="msg"></p>
+</section>
+
+<main id="app" class="hidden">
+  <nav id="tabs">
+    <button data-tab="cluster" class="active">Cluster</button>
+    <button data-tab="timing">Timing</button>
+    <button data-tab="scenes">Scenes</button>
+    <button data-tab="calib">Calibration</button>
+    <button data-tab="config">Config</button>
+    <button data-tab="logs">Logs</button>
+  </nav>
+
+  <section data-panel="cluster" class="panel">
+    <div class="card"><h3>Nodes</h3><div class="scroll"><table id="nodes"></table></div>
+      <p class="hint">Failover makes the network drop for ~20–40 s on a Pi 3 (single radio). Renderers keep running.</p>
+    </div>
+    <div class="card"><h3>State transitions (this node)</h3><pre id="transitions" class="log"></pre></div>
+  </section>
+
+  <section data-panel="timing" class="panel hidden">
+    <div class="card grid2">
+      <div>
+        <div class="big" id="bpmBig">---.-</div>
+        <div id="srcLine" class="sub"></div>
+        <div id="beatDots" class="dots"><i></i><i></i><i></i><i></i></div>
+      </div>
+      <div class="ctl">
+        <label>BPM <input id="bpmIn" type="number" min="40" max="240" step="0.1"></label>
+        <button id="bpmSet">set (manual)</button>
+        <button id="tap" class="tap">TAP</button>
+        <div class="row">
+          <span>phase nudge</span>
+          <button data-nudge="-20">-20</button><button data-nudge="-5">-5</button>
+          <button data-nudge="5">+5</button><button data-nudge="20">+20</button><span>ms</span>
+        </div>
+        <div class="row">
+          <button id="downbeat">this beat = downbeat</button>
+          <button id="manualOff">back to audio (auto)</button>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <h3>Audio</h3><div id="audioInfo" class="kv"></div>
+      <p class="hint">LIVE = beat phase tracked from the USB line-in right now. PREDICTED = free-running at the last tempo
+        (audio lost, or the current leader has no audio interface — it cannot detect new music). MANUAL = operator set.</p>
+    </div>
+  </section>
+
+  <section data-panel="scenes" class="panel hidden">
+    <div class="card">
+      <h3>Now</h3>
+      <div class="row"><label>quantize <select id="quant"><option>bar</option><option>beat</option><option>eighth</option><option>sixteenth</option></select></label>
+        <label>targets <select id="sceneTarget"><option value="">all CRTs</option></select></label>
+        <label>bars <input id="sceneBars" type="number" min="1" max="1024" placeholder="∞"></label></div>
+      <div id="sceneBtns" class="row wrap"></div>
+      <button id="clearScene" class="ghost">clear overrides</button>
+      <div id="overrides" class="sub"></div>
+    </div>
+    <div class="card">
+      <h3>Programme</h3>
+      <div class="row"><label>mode <select id="mode"><option>GLOBAL</option><option>INDIVIDUAL</option><option>CHOREOGRAPHED</option></select></label>
+        <label>default quantize <select id="defQuant"><option>bar</option><option>beat</option><option>eighth</option><option>sixteenth</option></select></label></div>
+      <table id="playlist"></table>
+      <div class="row"><button id="plAdd" class="ghost">+ scene</button><button id="plSave">apply playlist / mode</button></div>
+      <h4>Individual assignments</h4><div id="indiv" class="row wrap"></div>
+      <h4>Choreography (JSON)</h4>
+      <textarea id="choreo" rows="6" spellcheck="false"></textarea>
+      <button id="choreoSave">apply choreography</button>
+    </div>
+    <div class="card">
+      <h3>Look</h3>
+      <label>intensity <input id="intensity" type="range" min="0" max="1" step="0.05"></label>
+      <div class="row"><label>countdown target <input id="cdTarget" placeholder="2027-01-01T00:00:00"></label>
+        <label>label <input id="cdLabel" maxlength="24"></label><button id="cdSave">save</button></div>
+    </div>
+  </section>
+
+  <section data-panel="calib" class="panel hidden">
+    <div class="card grid2">
+      <div>
+        <h3>Visual calibration</h3>
+        <div class="row"><label>CRT <select id="calTarget"></select></label>
+          <label>BPM <input id="calBpm" type="number" min="40" max="180" value="120"></label></div>
+        <div class="row wrap"><button id="calStart">flash selected CRT</button>
+          <button id="calAll" class="ghost">flash ALL CRTs (camera compare)</button>
+          <button id="calClick" class="ghost">flash + audio click</button>
+          <label class="chk"><input id="clickHere" type="checkbox"> click in this browser</label></div>
+        <p class="hint">Watch the CRT and press <b>Enter</b> (or the TAP pad) <b>in rhythm, anticipating</b> each flash — not as a
+          reaction after seeing it. 16–32 taps. A USB keyboard on the Pi is more precise than this browser
+          (kernel timestamps vs. Wi-Fi + browser jitter).</p>
+        <button id="calTap" class="tap">TAP (Enter)</button>
+        <div class="row">
+          <span>offset</span>
+          <button data-adj="-20">-20</button><button data-adj="-5">-5</button><button data-adj="-1">-1</button>
+          <button data-adj="1">+1</button><button data-adj="5">+5</button><button data-adj="20">+20</button><span>ms</span>
+        </div>
+        <div class="row"><button id="calApply" class="ghost">use suggestion</button><button id="calSave">save</button>
+          <button id="calCancel" class="ghost">cancel</button><button id="calReset" class="ghost">reset to 0</button></div>
+      </div>
+      <div>
+        <div id="calStatus" class="kv"></div>
+        <p class="hint">Sign: negative offset = visuals earlier. Tapping measures <i>perceived</i> alignment including your
+          own anticipation bias; it is not a latency measurement. Verify with a 120/240 fps camera or a photodiode
+          (see docs/hardware.md).</p>
+      </div>
+    </div>
+    <div class="card"><h3>Saved offsets</h3><table id="offsets"></table>
+      <h4>Calibration history</h4><table id="calHist"></table></div>
+  </section>
+
+  <section data-panel="config" class="panel hidden">
+    <div class="card">
+      <h3>Timing &amp; display</h3>
+      <div class="row wrap">
+        <label>global A/V offset ms <input id="globOff" type="number" min="-500" max="500" step="1"></label>
+        <label>display latency ms <input id="dispLat" type="number" min="0" max="500" step="1"></label>
+        <label>fps cap <input id="fpsCap" type="number" min="5" max="60"></label>
+        <button id="timingSave">save</button></div>
+    </div>
+    <div class="card">
+      <h3>Safety</h3>
+      <div class="row wrap">
+        <label class="chk"><input id="reduced" type="checkbox"> reduced flashing</label>
+        <label>max flash Hz <input id="maxHz" type="number" min="0.5" max="3" step="0.5"></label>
+        <label>max flash luminance <input id="maxLum" type="number" min="0.05" max="1" step="0.05"></label>
+        <button id="safetySave">save</button></div>
+    </div>
+    <div class="card">
+      <h3>Configuration</h3>
+      <div class="row wrap"><a id="exportBtn" class="btn" href="/api/config/export" download>export JSON</a>
+        <label class="btn ghost">import JSON <input id="importFile" type="file" accept="application/json" class="hidden"></label>
+        <button id="setTime" class="ghost">set cluster clock from this device</button></div>
+      <p id="cfgMsg" class="msg"></p>
+    </div>
+  </section>
+
+  <section data-panel="logs" class="panel hidden">
+    <div class="card"><h3>Events</h3><pre id="events" class="log"></pre></div>
+  </section>
+  <div id="toast" class="toast hidden"></div>
+</main>
+<script type="module" src="app.js"></script>
+</body>
+</html>
