@@ -25,6 +25,8 @@ Environment=XDG_SESSION_TYPE=wayland WLR_LIBINPUT_NO_DEVICES=1
 ExecStart=/usr/bin/cage -d -- /opt/phosphor2000/scripts/kiosk-launch.sh
 Restart=always
 RestartSec=3
+# keep Chromium off the audio core (core 3)
+CPUAffinity=0 1 2
 
 [Install]
 WantedBy=phosphor.target

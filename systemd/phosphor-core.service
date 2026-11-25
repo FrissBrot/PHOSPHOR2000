@@ -23,6 +23,7 @@ RuntimeDirectoryPreserve=yes
 StateDirectory=phosphor2000
 # Timing matters more than throughput: modest real-time-ish priority, never RT.
 Nice=-5
+CPUAffinity=0 1 2
 NoNewPrivileges=yes
 ProtectSystem=full
 ProtectHome=yes

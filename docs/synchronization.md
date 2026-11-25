@@ -32,6 +32,13 @@ and broadcasts it. **Message arrival time is never used as beat time.**
 
 ## 3. Clock synchronisation
 
+Receive times t2 (leader) and t4 (follower) are **kernel timestamps** (`SO_TIMESTAMPNS`, taken in
+the network stack when the datagram arrives, converted to CLOCK_MONOTONIC), so Python/asyncio
+scheduling delay does not enter the estimate; t3 is taken right before the reply is sent.
+Followers scan for competing hotspots only every 3–4 min, because a Wi-Fi scan briefly takes the
+radio off-channel and produces latency spikes.
+
+
 Four-timestamp exchange (1 Hz, 6-ping burst after joining):
 `offset = ((t2 − t1) + (t3 − t4)) / 2`, `delay = (t4 − t1) − (t3 − t2)`.
 
@@ -73,6 +80,17 @@ t_present = rAF timestamp + one refresh interval (predicted scan-out vsync)
 * PAL is 50 Hz **interlaced**: the two fields of a frame are 20 ms apart, and a line at the bottom
   of the screen is scanned ~20 ms after the top within a field. Large flashes therefore span
   one field of uncertainty by nature. The renderer draws at 25 fps (every second vsync).
+* **Beat-locked frames.** At 25 fps a frame stays 40 ms on screen, which would make beat events
+  appear 0–40 ms late and differ between CRTs whose vsyncs are not aligned. The renderer therefore
+  checks on *every* vsync whether an eighth-note boundary (or a calibration flash) became due; if
+  so it draws immediately, between the regular frames, and evaluates the frame at the end of that
+  vsync's window. Every musical event appears on the vsync nearest to it: error ±½ refresh
+  (±10 ms at 50 Hz). Desktop test: mean 4 ms, p95 7 ms at 60 Hz. If the Pi cannot draw two frames
+  in a row (draw time > 70 % of a refresh), the extra frame is skipped.
+* The dashboard shows per CRT the measured refresh rate (**Hz**) and the render-side event error
+  (**beat err ms**, mean / p95). It does not include display latency (measure that with a camera).
+* The audio service runs on CPU core 3 with real-time round-robin priority; core and Chromium are
+  pinned to cores 0–2, so the busy master Pi cannot starve audio capture.
 * `visual_offset = global_visual_offset_ms + offsets_ms[node]` applies to **every** beat-reactive
   element because all of them derive from `t_eval`.
 

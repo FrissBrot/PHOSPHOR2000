@@ -353,8 +353,9 @@ class ClusterNode:
             self.peer_ips[sender] = src_ip
         if t == "ping":
             if self.is_leader():
-                recv_c = self.cluster_now(local)
-                self.send(ClockSync.answer_ping(m, recv_c, self.cluster_now(local)), sender)
+                recv_c = self.cluster_now(local)                     # kernel receive stamp
+                send_local = self.now_fn() if self.now_fn else local   # actual send moment
+                self.send(ClockSync.answer_ping(m, recv_c, self.cluster_now(max(send_local, local))), sender)
             return
         if t == "pong":
             if sender == self.election.current_leader_id():
@@ -397,6 +398,7 @@ class ClusterNode:
         self.election.on_message(m, local)
 
     on_restart_request: Callable[[str], None] | None = None
+    now_fn: Callable[[], float] | None = None   # real runtime: time.monotonic (simulation: None)
     on_wifi_country: Callable[[str], bool] | None = None
     applied_country: str | None = None
 
@@ -753,7 +755,8 @@ class ClusterNode:
 
     def _cmd_renderer_report(self, a: dict, local: float) -> dict:
         self.renderer = {k: a[k] for k in ("fps", "frame_ms", "scene", "dropped", "browser_offset_ms",
-                                           "browser_rtt_ms", "ua") if k in a}
+                                           "browser_rtt_ms", "ua", "refresh_hz", "beat_frames",
+                                           "event_err_ms", "event_err_p95_ms") if k in a}
         self.renderer["_rx"] = local
         return {}
 

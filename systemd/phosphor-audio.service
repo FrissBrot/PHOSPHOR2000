@@ -14,7 +14,12 @@ Environment=PYTHONUNBUFFERED=1 PHOSPHOR_ETC=/etc/phosphor2000 PHOSPHOR_RUN=/run/
 ExecStart=/opt/phosphor2000/venv/bin/python -m backend.audio.service
 Restart=always
 RestartSec=3
-Nice=-10
+# Core 3 is reserved for audio capture/analysis; real-time round-robin scheduling so Chromium
+# or the core can never starve the capture thread (the analysis itself uses ~15 % of a Pi 3 core).
+CPUAffinity=3
+CPUSchedulingPolicy=rr
+CPUSchedulingPriority=20
+LimitRTPRIO=20
 NoNewPrivileges=yes
 ProtectSystem=strict
 ProtectHome=yes

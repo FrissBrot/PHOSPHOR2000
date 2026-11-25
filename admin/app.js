@@ -103,7 +103,7 @@ function cls(ok, warn) { return ok ? "ok" : warn ? "warn" : "bad"; }
 function renderNodes() {
   const t = $("#nodes");
   t.innerHTML = "";
-  t.append(el("tr", {}, ...["node", "state", "ip", "uptime", "scene", "BPM", "src", "skew ppm", "jitter", "±unc", "audio", "fps", "cpu %", "temp", "offset", "Wi-Fi", ""].map((h) => el("th", {}, h))));
+  t.append(el("tr", {}, ...["node", "state", "ip", "uptime", "scene", "BPM", "src", "skew ppm", "jitter", "±unc", "audio", "fps", "Hz", "beat err ms", "cpu %", "temp", "offset", "Wi-Fi", ""].map((h) => el("th", {}, h))));
   const ids = Object.keys(S.nodes).sort();
   for (const id of ids) {
     const n = S.nodes[id];
@@ -128,6 +128,9 @@ function renderNodes() {
       el("td", { class: sy.uncertainty_ms > 10 ? "warn" : "" }, fmt(sy.uncertainty_ms, 1)),
       el("td", { class: au.live ? "ok" : "" }, audio),
       el("td", { class: rd.fps && rd.fps < 20 ? "warn" : "" }, fmt(rd.fps, 1)),
+      el("td", {}, fmt(rd.refresh_hz, 1)),
+      el("td", { class: rd.event_err_p95_ms > 15 ? "warn" : "", title: "render-side beat timing error: mean / p95 (excludes display latency)" },
+         rd.event_err_ms == null ? "–" : `${fmt(rd.event_err_ms, 1)} / ${fmt(rd.event_err_p95_ms, 1)}`),
       el("td", {}, fmt(me.cpu_pct, 0)), el("td", {}, me.temp_c ? `${fmt(me.temp_c, 0)}°` : "–"),
       el("td", {}, off === undefined ? "0" : fmt(off, 1)), el("td", {}, n.wifi_country || "–"), actions));
   }

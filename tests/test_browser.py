@@ -195,3 +195,17 @@ def test_admin_dashboard(server, browser):
     page.screenshot(path=str(OUT / "admin-scenes.png"))
     page.close()
     assert not [e for e in errors if "401" not in e], errors
+
+
+def test_beat_locked_frames_have_small_event_error(server, browser):
+    """Events (eighth notes) must appear on the vsync nearest to them: |error| <= ~half a refresh."""
+    base, _ = server
+    page = browser.new_page(viewport={"width": 720, "height": 576})
+    page.goto(f"{base}/?demo=1&scene=dance&bpm=137")
+    page.wait_for_timeout(6000)
+    st = page.evaluate("(() => { const r = window.__phos; return {...r.eventStats(), n: r.evErrs.length, hz: 1000 / r.refreshMs, forced: r.forcedFrames}; })()")
+    page.close()
+    assert st["n"] > 20, st  # ~27 eighth notes in 6 s at 137 BPM
+    print("event timing", st)
+    half = 1000 / st["hz"] / 2
+    assert st["mean"] <= half + 2 and st["p95"] <= half + 6, st

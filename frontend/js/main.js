@@ -84,8 +84,12 @@ if (params.get("demo") || params.get("bench")) {
   renderer.onStats = null;
   setInterval(() => {
     const seg = renderer.lastSegKey || "";
+    const ev = renderer.eventStats();
+    const r1 = (x) => (x === null ? null : Math.round(x * 10) / 10);
     link.report({ fps: Math.round(renderer.fps() * 10) / 10, frame_ms: Math.round(renderer.drawMsAvg * 100) / 100,
                   dropped: renderer.dropped, scene: seg.split("@")[0],
+                  refresh_hz: r1(1000 / renderer.refreshMs), beat_frames: renderer.forcedFrames,
+                  event_err_ms: r1(ev.mean), event_err_p95_ms: r1(ev.p95),
                   browser_rtt_ms: clock.rttMs, ua: navigator.userAgent.slice(0, 80) });
   }, 2000);
 }

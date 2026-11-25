@@ -33,6 +33,9 @@ laptop on Ethernet with SSH to all three (`journalctl -fu phosphor-core`).
 
 ### H2 Frame rate / load (per Pi, each scene, 5 min)
 - [ ] dashboard fps ≥ 24 in every scene (renderer reports fps and draw time)
+- [ ] dashboard **Hz** = 50 (composite PAL). If it shows 25, the interlaced mode is reported per
+  frame: beat-locked frames then have ±20 ms resolution — note it
+- [ ] dashboard **beat err ms** p95 ≤ ~12 ms on every Pi (render-side event timing)
 - [ ] `top`/dashboard: CPU %, RAM used, temperature, `get_throttled = 0x0`
 - [ ] if fps < 24: try `--enable-gpu-rasterization` or `--disable-gpu` in `/etc/phosphor2000/chromium-flags`, reduce `fps_cap`, report which scene
 

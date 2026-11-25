@@ -98,7 +98,7 @@ Send = Callable[[dict, str | None], None]
 
 
 class Election:
-    FOREIGN_SCAN_INTERVAL = 45.0
+    FOREIGN_SCAN_INTERVAL = 180.0   # background scans disturb Wi-Fi timing; trade-off vs split-brain detection
     LONE_LEADER_RESCAN = 90.0
     SCOUT_COOLDOWN = 60.0
     SCOUT_TIMEOUT = 30.0
@@ -569,7 +569,7 @@ class Election:
             if now - self.leader_seen > self.cfg.suspect_after:
                 self._go(NodeState.SUSPECTED_FAILURE, now, f"no leader beacon for {now - self.leader_seen:.1f}s")
             elif now >= self.next_foreign_scan:
-                self.next_foreign_scan = now + self.FOREIGN_SCAN_INTERVAL + self.rng.uniform(0, 15)
+                self.next_foreign_scan = now + self.FOREIGN_SCAN_INTERVAL + self.rng.uniform(0, 60)
                 self._scan()
         elif s == NodeState.SUSPECTED_FAILURE:
             if now - self.leader_seen > self.cfg.failure_after:

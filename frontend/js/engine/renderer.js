@@ -29,7 +29,8 @@ export class Renderer {
     this.refreshMs = 20;
     this.lastTs = null;
     this.lastDraw = -1e9;
-    this.frames = 0; this.dropped = 0; this.drawMsAvg = 0;
+    this.frames = 0; this.dropped = 0; this.drawMsAvg = 0; this.forcedFrames = 0;
+    this.lastEventKey = null; this.evErrs = [];
     this.fpsWindow = [];
     this.lastSegKey = null;
     this.segStartBeat = 0;
@@ -64,7 +65,18 @@ export class Renderer {
     this.lastTs = ts;
     const cap = this.fpsCap || 25;
     const minGap = 1000 / cap - this.refreshMs * 0.5;
-    if (ts - this.lastDraw < minGap) return;  // e.g. 50 Hz refresh -> draw every 2nd vsync
+    const regular = ts - this.lastDraw >= minGap;   // e.g. 50 Hz refresh -> every 2nd vsync
+    // Beat-locked frames: if a musical event (eighth-note boundary, calibration flash)
+    // became due since the last drawn frame, this vsync is the one nearest to it -> draw now,
+    // even between the regular 25 fps frames. Error per event: +-half a refresh (+-10 ms at 50 Hz)
+    // instead of 0..40 ms. Skipped if the Pi is too slow to draw two frames in a row.
+    let forced = false;
+    if (!regular) {
+      const ev = this.eventKey(this.evalTime(ts));
+      forced = ev !== null && ev !== this.lastEventKey && this.drawMsAvg < this.refreshMs * 0.7;
+      if (!forced) return;
+      this.forcedFrames++;
+    }
     if (this.lastDraw > 0 && ts - this.lastDraw > 2.5 * (1000 / cap)) this.dropped++;
     this.lastDraw = ts;
     this.clock.update(ts);
@@ -80,9 +92,46 @@ export class Renderer {
 
   fps() { return this.fpsWindow.length > 1 ? (this.fpsWindow.length - 1) / ((this.fpsWindow.at(-1) - this.fpsWindow[0]) / 1000) : 0; }
 
+  // Identifies the current musical event window; changes exactly at eighth-note boundaries of
+  // the timeline and at calibration flashes.
+  eventKey(t) {
+    if (t === null || t === undefined) return null;
+    const cal = (this.state && this.state.cal) || {};
+    let key = Math.floor(this.timeline.beatAt(t) * 2);
+    if (cal.active && cal.bpm) key = key * 1000 + (Math.floor(((t - cal.origin) * cal.bpm) / 60) & 511);
+    return key;
+  }
+
+  // Event-timing error of the frame drawn now: physical display start minus the physical time
+  // at which the event boundary was due (render side only; excludes display latency).
+  trackEventError(ts, t) {
+    const key = this.eventKey(t);
+    if (key === this.lastEventKey) return;
+    const prev = this.lastEventKey;
+    this.lastEventKey = key;
+    if (prev === null || prev === undefined || this.clock.applied === null) return;
+    const tl = this.timeline;
+    const b = Math.floor(tl.beatAt(t) * 2) / 2;                       // last eighth boundary
+    const st = this.state || {};
+    const lat = (st.display_latency_ms ?? 40) / 1000, off = (st.visual_offset_ms ?? 0) / 1000;
+    const due = (tl.timeOfBeat(b) - lat + off - this.clock.applied) * 1000;   // perf ms when the event should be visible
+    const err = ts + this.refreshMs - due;
+    if (Math.abs(err) > 200) return;  // timeline jump, not a frame-timing error
+    this.evErrs.push(err);
+    if (this.evErrs.length > 200) this.evErrs.shift();
+  }
+
+  eventStats() {
+    const a = this.evErrs.map(Math.abs).sort((x, y) => x - y);
+    if (!a.length) return { mean: null, p95: null };
+    return { mean: a.reduce((s, x) => s + x, 0) / a.length, p95: a[Math.floor(a.length * 0.95)] };
+  }
+
   evalTime(ts) {
     const st = this.state || {};
-    const present = ts + this.refreshMs;
+    // Frame drawn at rAF time ts is scanned out from the next vsync (ts + refresh). Evaluate at the
+    // END of that refresh's window: every event whose nearest vsync is this one is already shown.
+    const present = ts + this.refreshMs * 1.5;
     let c = this.clock.clusterAt(present);
     if (c === null) return null;
     const lat = (st.display_latency_ms ?? 40) / 1000;
@@ -115,6 +164,7 @@ export class Renderer {
     }
     const beat = tl.beatAt(t);
     this._lastBeat = beat;
+    this.trackEventError(ts, t);
     const phase = beat - Math.floor(beat);
     const bpb = tl.beats_per_bar;
     const seg = this.segmentAt(beat);

@@ -20,6 +20,7 @@ import os
 import shutil
 import signal
 import socket
+import struct
 import time
 from pathlib import Path
 
@@ -66,19 +67,75 @@ def detect_audio_device() -> bool:
     return False
 
 
-class UdpTransport(asyncio.DatagramProtocol):
+SO_TIMESTAMPNS = getattr(socket, "SO_TIMESTAMPNS", 35)   # Linux; == SCM_TIMESTAMPNS (struct timespec)
+_TIMESPEC = struct.Struct("@ll")
+
+
+def kernel_rx_monotonic(ancdata, now_real: float, now_mono: float) -> float | None:
+    """Convert a SO_TIMESTAMPNS (CLOCK_REALTIME, stamped by the kernel when the packet arrived)
+    into CLOCK_MONOTONIC using the realtime-monotonic difference measured right now."""
+    for level, typ, data in ancdata:
+        if level == socket.SOL_SOCKET and typ == SO_TIMESTAMPNS and len(data) >= _TIMESPEC.size:
+            sec, nsec = _TIMESPEC.unpack_from(data)
+            real = sec + nsec / 1e9
+            mono = real - (now_real - now_mono)
+            if 0 <= now_mono - mono < 5.0:      # sanity: not in the future, not ancient
+                return mono
+    return None
+
+
+class UdpTransport:
+    """Cluster UDP socket with kernel receive timestamps.
+
+    Clock-sync accuracy depends on *when* a packet arrived, not when Python got round to it:
+    the kernel stamps every datagram (SO_TIMESTAMPNS) in the receive path, so asyncio/GIL
+    scheduling delay drops out of t2 (leader) and t4 (follower). Falls back to time.monotonic().
+    """
+
     def __init__(self, core: "Core") -> None:
         self.core = core
-        self.tr: asyncio.DatagramTransport | None = None
+        self.sock: socket.socket | None = None
+        self.kernel_stamps = 0
+        self.fallback_stamps = 0
 
-    def connection_made(self, transport) -> None:  # type: ignore[override]
-        self.tr = transport
-        sock = transport.get_extra_info("socket")
-        sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
-        sock.setsockopt(socket.IPPROTO_IP, socket.IP_TOS, 0xB8)  # DSCP EF: WMM voice queue on Wi-Fi
+    def open(self, port: int, loop: asyncio.AbstractEventLoop) -> None:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        s.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+        s.setsockopt(socket.IPPROTO_IP, socket.IP_TOS, 0xB8)  # DSCP EF: WMM voice queue on Wi-Fi
+        try:
+            s.setsockopt(socket.SOL_SOCKET, SO_TIMESTAMPNS, 1)
+        except OSError:
+            log.warning("SO_TIMESTAMPNS unavailable: user-space receive timestamps")
+        s.bind(("0.0.0.0", port))
+        s.setblocking(False)
+        self.sock = s
+        loop.add_reader(s.fileno(), self._readable)
 
-    def datagram_received(self, data: bytes, addr) -> None:  # type: ignore[override]
-        recv_local = time.monotonic()
+    def sendto(self, data: bytes, addr) -> None:
+        assert self.sock is not None
+        self.sock.sendto(data, addr)
+
+    def _readable(self) -> None:
+        assert self.sock is not None
+        for _ in range(64):
+            try:
+                data, anc, _flags, addr = self.sock.recvmsg(65535, 256)
+            except (BlockingIOError, InterruptedError):
+                return
+            except OSError:
+                self.core.tx_errors += 1
+                return
+            now_mono = time.monotonic()
+            stamp = kernel_rx_monotonic(anc, time.time(), now_mono)
+            if stamp is None:
+                self.fallback_stamps += 1
+                stamp = now_mono
+            else:
+                self.kernel_stamps += 1
+            self.datagram_received(data, addr, stamp)
+
+    def datagram_received(self, data: bytes, addr, recv_local: float) -> None:
         try:
             msg = self.core.codec.decode(data)
         except CodecError:
@@ -92,9 +149,6 @@ class UdpTransport(asyncio.DatagramProtocol):
             self.core.node.on_message(msg, recv_local, addr[0])
         except Exception:
             log.exception("error handling %s from %s", msg.get("t"), msg.get("_from"))
-
-    def error_received(self, exc: Exception) -> None:  # type: ignore[override]
-        self.core.tx_errors += 1
 
 
 class LocalProto(asyncio.DatagramProtocol):
@@ -132,6 +186,7 @@ class Core:
         self.udp: UdpTransport | None = None
         self.node = ClusterNode(cfg, adapter or make_adapter(cfg), self.send, has_audio=has_audio)
         self.node.on_restart_request = self._restart
+        self.node.now_fn = time.monotonic
         if cfg.network.manage and not safe_mode():
             self.node.on_wifi_country = set_wifi_country
         self.cache = StateCache(state_dir)
@@ -149,7 +204,7 @@ class Core:
 
     # ------------------------------------------------------------ transport
     def send(self, msg: dict, to: str | None) -> None:
-        if self.udp is None or self.udp.tr is None:
+        if self.udp is None or self.udp.sock is None:
             return
         if to is not None:
             msg = {**msg, "_to": to}
@@ -160,7 +215,7 @@ class Core:
             return
         ip = self.node.peer_ips.get(to) if to else None
         try:
-            self.udp.tr.sendto(data, (ip or self.broadcast, self.cfg.network.udp_port))
+            self.udp.sendto(data, (ip or self.broadcast, self.cfg.network.udp_port))
             self.tx += 1
         except OSError:
             self.tx_errors += 1
@@ -216,10 +271,8 @@ class Core:
     # ------------------------------------------------------------------ loop
     async def start_network(self) -> None:
         loop = asyncio.get_running_loop()
-        _, proto = await loop.create_datagram_endpoint(lambda: UdpTransport(self),
-                                                       local_addr=("0.0.0.0", self.cfg.network.udp_port),
-                                                       reuse_port=True, allow_broadcast=True)
-        self.udp = proto
+        self.udp = UdpTransport(self)
+        self.udp.open(self.cfg.network.udp_port, loop)
         try:
             RUN_DIR.mkdir(parents=True, exist_ok=True)
             path = RUN_DIR / LOCAL_SOCK
@@ -243,7 +296,9 @@ class Core:
             if now - last_metrics > 2.0:
                 last_metrics = now
                 self.metrics = {**read_metrics(), "cpu_pct": self.cpu.sample(), "rx": self.rx,
-                                "rx_rejected": self.rx_rejected, "tx": self.tx, "tx_errors": self.tx_errors}
+                                "rx_rejected": self.rx_rejected, "tx": self.tx, "tx_errors": self.tx_errors,
+                                "kernel_rx_stamps": self.udp.kernel_stamps if self.udp else 0,
+                                "fallback_rx_stamps": self.udp.fallback_stamps if self.udp else 0}
             if self.node.dirty and time.monotonic() - self.cache.last_write > 10.0:
                 self.persist()
             await asyncio.sleep(0.05)
