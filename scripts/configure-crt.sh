@@ -61,8 +61,8 @@ status() {
   echo "OS codename : $CODENAME"
   echo "Model       : $MODEL"
   echo "Boot dir    : $BOOT"
-  echo "--- config.txt (cyberspace block + vc4 lines) ---"
-  grep -nE "vc4-|sdtv_|enable_tvout|hdmi_ignore|cyberspace|cs2k" "$CONFIG" 2>/dev/null || echo "(none)"
+  echo "--- config.txt (phosphor block + vc4 lines) ---"
+  grep -nE "vc4-|sdtv_|enable_tvout|hdmi_ignore|phosphor|phos" "$CONFIG" 2>/dev/null || echo "(none)"
   echo "--- cmdline.txt ---"
   cat "$CMDLINE" 2>/dev/null || echo "(missing)"
   echo "--- kernel DRM connectors ---"
@@ -78,7 +78,7 @@ status() {
 
 apply() {
   need_root
-  [ -f "$CONFIG" ] || die "$CONFIG not found (CS2K_BOOT_DIR?)"
+  [ -f "$CONFIG" ] || die "$CONFIG not found (PHOS_BOOT_DIR?)"
   [ -f "$CMDLINE" ] || die "$CMDLINE not found"
   case $MODEL in *"Pi 5"*) die "Pi 5 composite needs a different setup; this project targets Pi 3" ;; esac
   local bk
@@ -86,10 +86,10 @@ apply() {
   c_info "backup: $bk"
   strip_block "$CONFIG"
   # comment out other display driver overlays (restored by --remove / --rollback)
-  sed -i -E 's/^(dtoverlay=vc4-(f)?kms-v3d.*)$/#cs2k# \1/' "$CONFIG"
+  sed -i -E 's/^(dtoverlay=vc4-(f)?kms-v3d.*)$/#phos# \1/' "$CONFIG"
   {
     echo "$MARK_BEGIN"
-    echo "# composite $NORM 4:3 for CYBERSPACE 2000 ($MODE mode) — managed by configure-crt.sh"
+    echo "# composite $NORM 4:3 for PHOSPHOR2000 ($MODE mode) — managed by configure-crt.sh"
     echo "[all]"
     if [ "$MODE" = kms ]; then
       echo "dtoverlay=vc4-kms-v3d,composite"
@@ -119,7 +119,7 @@ apply() {
 remove() {
   need_root
   strip_block "$CONFIG"
-  sed -i -E 's/^#cs2k# //' "$CONFIG"
+  sed -i -E 's/^#phos# //' "$CONFIG"
   local line t
   line=$(head -n1 "$CMDLINE")
   for t in video=Composite-1 vc4.tv_norm consoleblank vt.global_cursor_default logo.nologo; do
@@ -136,7 +136,7 @@ case $ACTION in
   rollback|rollback-last)
     need_root
     if [ "$ACTION" = rollback ]; then b=$(original_backup crt) || true; else b=$(latest_backup crt) || true; fi
-    [ -n "${b:-}" ] || die "no CRT backup found in $CS2K_BACKUP_DIR"
+    [ -n "${b:-}" ] || die "no CRT backup found in $PHOS_BACKUP_DIR"
     restore_backup "$b"
     ;;
 esac

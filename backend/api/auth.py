@@ -16,8 +16,8 @@ from pathlib import Path
 
 import yaml
 
-COOKIE = "cs2k_session"
-CSRF_HEADER = "x-cs2k"
+COOKIE = "phos_session"
+CSRF_HEADER = "x-phos"
 SESSION_TTL = 12 * 3600
 SCRYPT_N, SCRYPT_R, SCRYPT_P = 2 ** 14, 8, 1
 
@@ -52,7 +52,7 @@ def verify_password(pw: str, stored: str) -> bool:
 class Sessions:
     def __init__(self, secret: str) -> None:
         # Without a configured secret, sessions survive only until restart (random key).
-        self.key = hashlib.sha256((secret or secrets.token_hex(32)).encode() + b"|cs2k-session").digest()
+        self.key = hashlib.sha256((secret or secrets.token_hex(32)).encode() + b"|phos-session").digest()
         self.revoked: dict[str, float] = {}
 
     def issue(self, user: str = "admin") -> str:
@@ -115,11 +115,11 @@ def update_secrets(path: Path, **values: str) -> None:
 
 
 def passwd_main() -> None:
-    """`cyberspace-passwd`: set the admin password (writes the hash to secrets.yaml)."""
+    """`phosphor-passwd`: set the admin password (writes the hash to secrets.yaml)."""
     from backend.config import ETC_DIR
     path = Path(sys.argv[1]) if len(sys.argv) > 1 else ETC_DIR / "secrets.yaml"
-    pw = os.environ.get("CYBERSPACE_ADMIN_PASSWORD") or getpass.getpass("new admin password: ")
-    if not os.environ.get("CYBERSPACE_ADMIN_PASSWORD") and pw != getpass.getpass("repeat: "):
+    pw = os.environ.get("PHOSPHOR_ADMIN_PASSWORD") or getpass.getpass("new admin password: ")
+    if not os.environ.get("PHOSPHOR_ADMIN_PASSWORD") and pw != getpass.getpass("repeat: "):
         sys.exit("passwords differ")
     try:
         h = hash_password(pw)

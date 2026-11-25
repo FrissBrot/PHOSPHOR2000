@@ -1,4 +1,4 @@
-"""cyberspace-input: USB keyboard -> core, with kernel monotonic timestamps.
+"""phosphor-input: USB keyboard -> core, with kernel monotonic timestamps.
 
 Uses the Linux evdev interface directly (/dev/input/event*):
 * ``EVIOCSCLOCKID(CLOCK_MONOTONIC)`` makes the kernel stamp events with the
@@ -21,7 +21,7 @@ import struct
 import time
 from pathlib import Path
 
-log = logging.getLogger("cs2k.input")
+log = logging.getLogger("phos.input")
 
 EV_KEY = 0x01
 KEY_ENTER = 28
@@ -29,7 +29,7 @@ CLOCK_MONOTONIC = 1
 EVIOCSCLOCKID = 0x400445A0          # _IOW('E', 0xa0, int)
 EVENT_FMT = "llHHi"                 # struct input_event (native long = timeval fields)
 EVENT_SIZE = struct.calcsize(EVENT_FMT)
-SOCK = Path(os.environ.get("CYBERSPACE_RUN", "/run/cyberspace2000")) / "core.sock"
+SOCK = Path(os.environ.get("PHOSPHOR_RUN", "/run/phosphor2000")) / "core.sock"
 
 
 def is_keyboard(event_path: Path, sys_root: Path = Path("/sys/class/input")) -> bool:

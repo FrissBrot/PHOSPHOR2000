@@ -3,11 +3,11 @@ import { GREEN, GREEN_DIM, GREEN_HOT, font } from "../engine/glyphs.js";
 import { hash01 } from "../engine/prng.js";
 
 const LINES = [
-  "CYBERSPACE 2000 BIOS v2.000  (C) 1999-2000",
+  "PHOSPHOR2000 BIOS v2.000  (C) 1999-2000",
   "CPU: QUAD CORTEX-A53 @ 1200MHz ... OK",
   "MEMORY TEST: %MEM% KB OK",
   "PAL COMPOSITE 720x576i @ 50Hz ... OK",
-  "MOUNTING /dev/cyberspace ... OK",
+  "MOUNTING /dev/phosphor ... OK",
   "NODE %NODE%  STATE %STATE%",
   "SYNC: %SRC% TIMELINE %BPM% BPM",
   "LOADING NEURAL INTERFACE ........ DONE",

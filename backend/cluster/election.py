@@ -26,7 +26,7 @@ from typing import Callable
 from backend.config import NetworkConfig
 from backend.network.base import EventKind, NetEvent, NetworkAdapter, RadioMode
 
-log = logging.getLogger("cs2k.election")
+log = logging.getLogger("phos.election")
 
 
 class NodeState(str, Enum):

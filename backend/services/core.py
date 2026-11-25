@@ -1,4 +1,4 @@
-"""cyberspace-core: the per-Pi daemon (network/election, sync, replication, API).
+"""phosphor-core: the per-Pi daemon (network/election, sync, replication, API).
 
 One asyncio loop hosts:
   * the 20 Hz node tick (election state machine, clock sync, timeline upkeep)
@@ -30,11 +30,11 @@ from backend.network.base import NetworkAdapter, NullAdapter
 from backend.storage.cache import EventLog, StateCache, boot_id
 from backend.services.system import CpuSampler, read_metrics, run_action
 
-log = logging.getLogger("cs2k.core")
+log = logging.getLogger("phos.core")
 
-SAFE_MODE_FLAGS = (Path("/boot/firmware/cyberspace-safe-mode"), Path("/boot/cyberspace-safe-mode"),
+SAFE_MODE_FLAGS = (Path("/boot/firmware/phosphor-safe-mode"), Path("/boot/phosphor-safe-mode"),
                    ETC_DIR / "safe-mode")
-RUN_DIR = Path(os.environ.get("CYBERSPACE_RUN", "/run/cyberspace2000"))
+RUN_DIR = Path(os.environ.get("PHOSPHOR_RUN", "/run/phosphor2000"))
 LOCAL_SOCK = "core.sock"
 
 
@@ -291,7 +291,7 @@ async def amain(cfg: AppConfig) -> None:
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(description="CYBERSPACE 2000 core daemon")
+    ap = argparse.ArgumentParser(description="PHOSPHOR2000 core daemon")
     ap.add_argument("--node", help="override node id (development)")
     ap.add_argument("--port", type=int)
     ap.add_argument("--no-network", action="store_true", help="never touch the radio")

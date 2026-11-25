@@ -1,0 +1,15 @@
+# Optional: restrict PHOSPHOR ports to the cluster subnet and loopback (separate nft table,
+# does not touch other rules). Enabled by install.sh --firewall.
+[Unit]
+Description=PHOSPHOR2000 firewall table
+After=network-pre.target
+Before=phosphor-core.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/sbin/nft -f /opt/phosphor2000/systemd/phosphor.nft
+ExecStop=/usr/sbin/nft delete table inet phosphor
+
+[Install]
+WantedBy=multi-user.target

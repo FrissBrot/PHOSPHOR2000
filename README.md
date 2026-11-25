@@ -1,11 +1,11 @@
-# CYBERSPACE 2000 (PHOSPHOR2000)
+# PHOSPHOR2000 (PHOSPHOR2000)
 
 A distributed, offline, retro-green visual system for **3–5 Raspberry Pi 3 B/B+**, each driving a
 **4:3 PAL CRT over composite**. Every Pi renders the same deterministic Canvas 2D animations
 (boot terminal + live clock, DANCE.EXE, spectrum analyzer, neon grid + cube, data rain, Y2K
 countdown), locked to a **distributed musical timeline** that follows the DJ mixer via a USB
 line-in. No router, no internet, no permanent master: the Pis form their own Wi-Fi
-(`CYBERSPACE-2000`, admin at `http://192.168.50.1:8080/admin/`) and hand the hotspot over when
+(`PHOSPHOR2000`, admin at `http://192.168.50.1:8080/admin/`) and hand the hotspot over when
 the leader disappears.
 
 > **Status:** software complete with 107 automated tests (unit, simulated cluster integration,
@@ -30,12 +30,12 @@ the leader disappears.
 * Try it on a desktop (no Pi needed):
   ```bash
   uv venv .venv && uv pip install --python .venv/bin/python -e ".[dev]"
-  CYBERSPACE_ETC=/tmp/cs2k/etc CYBERSPACE_STATE=/tmp/cs2k/state CYBERSPACE_RUN=/tmp/cs2k/run \
+  PHOSPHOR_ETC=/tmp/phos/etc PHOSPHOR_STATE=/tmp/phos/state PHOSPHOR_RUN=/tmp/phos/run \
     .venv/bin/python -m backend.services.core --node pi-01 --no-network
   # renderer: http://127.0.0.1:8080/   demo without core: /?demo=1&scene=rain
   # admin:    http://127.0.0.1:8080/admin/ (set a password first, see below)
-  CYBERSPACE_ADMIN_PASSWORD=changeme123 .venv/bin/python -c \
-    "import sys;sys.argv=['x','/tmp/cs2k/etc/secrets.yaml'];from backend.api.auth import passwd_main;passwd_main()"
+  PHOSPHOR_ADMIN_PASSWORD=changeme123 .venv/bin/python -c \
+    "import sys;sys.argv=['x','/tmp/phos/etc/secrets.yaml'];from backend.api.auth import passwd_main;passwd_main()"
   ```
 * Simulate a cluster: `python -m backend.cluster.simulation --scenario failover|partition|boot`
 * Tests: `.venv/bin/python -m pytest -q`

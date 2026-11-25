@@ -1,7 +1,7 @@
 """Whitelisted system actions. No shell, no user-supplied argv.
 
-The core runs as the unprivileged user ``cyberspace`` with NoNewPrivileges.
-scripts/install.sh installs a polkit rule (systemd/50-cyberspace.rules) that
+The core runs as the unprivileged user ``phosphor`` with NoNewPrivileges.
+scripts/install.sh installs a polkit rule (systemd/50-phosphor.rules) that
 lets exactly this user restart exactly these units and reboot — nothing else.
 """
 from __future__ import annotations
@@ -12,12 +12,12 @@ import shutil
 import subprocess
 from pathlib import Path
 
-log = logging.getLogger("cs2k.system")
+log = logging.getLogger("phos.system")
 
 ACTIONS: dict[str, list[str]] = {
-    "renderer": ["/usr/bin/systemctl", "--no-ask-password", "restart", "cyberspace-renderer.service"],
-    "audio": ["/usr/bin/systemctl", "--no-ask-password", "restart", "cyberspace-audio.service"],
-    "core": ["/usr/bin/systemctl", "--no-ask-password", "restart", "cyberspace-core.service"],
+    "renderer": ["/usr/bin/systemctl", "--no-ask-password", "restart", "phosphor-renderer.service"],
+    "audio": ["/usr/bin/systemctl", "--no-ask-password", "restart", "phosphor-audio.service"],
+    "core": ["/usr/bin/systemctl", "--no-ask-password", "restart", "phosphor-core.service"],
     "reboot": ["/usr/bin/systemctl", "--no-ask-password", "reboot"],
 }
 
@@ -27,7 +27,7 @@ def run_action(what: str, dry_run: bool | None = None) -> bool:
     if argv is None:
         raise ValueError("unknown action")
     if dry_run is None:
-        dry_run = os.environ.get("CYBERSPACE_DRY_RUN") == "1"
+        dry_run = os.environ.get("PHOSPHOR_DRY_RUN") == "1"
     if dry_run:
         log.warning("dry-run: would execute %s", argv)
         return True

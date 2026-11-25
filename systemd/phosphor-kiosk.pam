@@ -1,4 +1,4 @@
-# /etc/pam.d/cyberspace-kiosk — session for the cage kiosk on tty1 (no password prompt involved)
+# /etc/pam.d/phosphor-kiosk — session for the cage kiosk on tty1 (no password prompt involved)
 auth      required  pam_permit.so
 account   required  pam_unix.so
 session   required  pam_unix.so

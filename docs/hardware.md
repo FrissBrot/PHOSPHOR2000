@@ -24,7 +24,7 @@ produce the real numbers. Record results in a copy of the table at the end.
 ## Validation checklist (3 Pis minimum)
 
 Set-up: 3 Pis + 3 CRTs side by side, audio Pi = pi-02, keyboard on pi-01, phone on the AP,
-laptop on Ethernet with SSH to all three (`journalctl -fu cyberspace-core`).
+laptop on Ethernet with SSH to all three (`journalctl -fu phosphor-core`).
 
 ### H1 Composite output
 - [ ] `configure-crt.sh --status` shows `Composite-1 connected`, mode 720x576i (PAL)
@@ -34,7 +34,7 @@ laptop on Ethernet with SSH to all three (`journalctl -fu cyberspace-core`).
 ### H2 Frame rate / load (per Pi, each scene, 5 min)
 - [ ] dashboard fps ≥ 24 in every scene (renderer reports fps and draw time)
 - [ ] `top`/dashboard: CPU %, RAM used, temperature, `get_throttled = 0x0`
-- [ ] if fps < 24: try `--enable-gpu-rasterization` or `--disable-gpu` in `/etc/cyberspace2000/chromium-flags`, reduce `fps_cap`, report which scene
+- [ ] if fps < 24: try `--enable-gpu-rasterization` or `--disable-gpu` in `/etc/phosphor2000/chromium-flags`, reduce `fps_cap`, report which scene
 
 ### H3 Failover duration
 - [ ] pull power of the leader; stopwatch/video from power-off until all followers show FOLLOWER
@@ -66,11 +66,11 @@ laptop on Ethernet with SSH to all three (`journalctl -fu cyberspace-core`).
 ### H7 Calibration
 - [ ] keyboard on pi-01: keys 1–3 select each CRT, flash visible only on the selected CRT
 - [ ] 16–32 Enter taps → phase, SD, SE plausible; ±1/5/20 adjust visible immediately without restart
-- [ ] save → offset survives: leader failover, `systemctl restart cyberspace-renderer`, reboot of that Pi
+- [ ] save → offset survives: leader failover, `systemctl restart phosphor-renderer`, reboot of that Pi
 - [ ] camera check after calibration (all-CRT flash)
 
 ### H8 Robustness
-- [ ] `systemctl restart cyberspace-core` on a follower: picture continues, rejoins in seconds
+- [ ] `systemctl restart phosphor-core` on a follower: picture continues, rejoins in seconds
 - [ ] kill Chromium (`pkill chromium`): back in < 10 s on the same scene/beat
 - [ ] 8 h soak test: memory stable, no stuck states (`journalctl -p warning`)
 

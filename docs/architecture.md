@@ -1,18 +1,18 @@
 # Architecture
 
-CYBERSPACE 2000 runs **identical software on every Pi** (3–5 × Raspberry Pi 3 B/B+, each driving a
+PHOSPHOR2000 runs **identical software on every Pi** (3–5 × Raspberry Pi 3 B/B+, each driving a
 4:3 PAL CRT over composite). There is no permanent master: whichever node currently owns the
 Wi-Fi hotspot is the *leader* and the authority for replicated state. Every node renders locally,
 so the network is an optimisation for synchronisation and control, never a dependency of the picture.
 
 ```
                  ┌──────────────────────── one Raspberry Pi ────────────────────────┐
- USB line-in ──► │ cyberspace-audio  (PortAudio callback → bounded queue → NumPy     │
+ USB line-in ──► │ phosphor-audio  (PortAudio callback → bounded queue → NumPy     │
  (optional)      │                    beat tracker: onsets, tempo, Beat-PLL)         │
-                 │        │ unix datagram (/run/cyberspace2000/core.sock)            │
- USB keyboard ─► │ cyberspace-input  (evdev, kernel CLOCK_MONOTONIC timestamps)      │
+                 │        │ unix datagram (/run/phosphor2000/core.sock)            │
+ USB keyboard ─► │ phosphor-input  (evdev, kernel CLOCK_MONOTONIC timestamps)      │
  (optional)      │        ▼                                                          │
-                 │ cyberspace-core   asyncio: 20 Hz tick                             │
+                 │ phosphor-core   asyncio: 20 Hz tick                             │
                  │   ├─ Election      (network state machine, hotspot ownership)    │
                  │   │    └─ NmcliAdapter (worker thread, fixed argv)  ── nmcli ──► NetworkManager
                  │   ├─ ClockSync     (4-timestamp exchange, skew, slew/step)        │
@@ -22,7 +22,7 @@ so the network is an optimisation for synchronisation and control, never a depen
                  │   ├─ UDP 47800     (HMAC-SHA256 datagrams: beacons, sync, state)  │◄──► other Pis
                  │   └─ FastAPI :8080 (admin API + WS, renderer WS, static files)    │◄──► admin phone/laptop
                  │        │ ws://127.0.0.1:8080/ws/render                            │
-                 │ cyberspace-renderer  cage (Wayland) + Chromium kiosk on tty1      │
+                 │ phosphor-renderer  cage (Wayland) + Chromium kiosk on tty1      │
                  │        Canvas 2D 640×480 virtual → composite 720×576i PAL → CRT   │
                  └───────────────────────────────────────────────────────────────────┘
 ```
@@ -31,13 +31,13 @@ so the network is an optimisation for synchronisation and control, never a depen
 
 | unit | role | why separate |
 |---|---|---|
-| `cyberspace-core` | network/election, sync, replication, API/WebSocket server | one event loop; nmcli on a worker thread so radio switching never blocks ticks or the renderer feed |
-| `cyberspace-audio` | capture + beat tracking (only does real work if a USB capture device exists) | real-time-ish, crash isolated, restartable without touching the network |
-| `cyberspace-input` | keyboard events with kernel timestamps for calibration | needs group `input` only |
-| `cyberspace-renderer` | cage + Chromium kiosk | browser crashes are common; restarted in 3 s, renders from cache |
-| `cyberspace-firewall` (optional) | separate nftables table | restricts 8080/47800 to 192.168.50.0/24 |
+| `phosphor-core` | network/election, sync, replication, API/WebSocket server | one event loop; nmcli on a worker thread so radio switching never blocks ticks or the renderer feed |
+| `phosphor-audio` | capture + beat tracking (only does real work if a USB capture device exists) | real-time-ish, crash isolated, restartable without touching the network |
+| `phosphor-input` | keyboard events with kernel timestamps for calibration | needs group `input` only |
+| `phosphor-renderer` | cage + Chromium kiosk | browser crashes are common; restarted in 3 s, renders from cache |
+| `phosphor-firewall` (optional) | separate nftables table | restricts 8080/47800 to 192.168.50.0/24 |
 
-"Network", "sync" and "server" from the requirements live inside `cyberspace-core` as independent
+"Network", "sync" and "server" from the requirements live inside `phosphor-core` as independent
 components of one asyncio loop: they share the cluster state machine and must agree on one clock
 estimate, and splitting them would add IPC latency to the timing path. Each tick catches and logs
 exceptions so one failing component cannot stop the others; systemd restarts the process on crash,
@@ -60,7 +60,7 @@ and a restarted core restores the exact clock offset and beat phase from its cac
 confidence, source, revision, epoch, seed), schedule (eras, overrides), shared config (scenes,
 safety, calibration offsets with per-entry versions, timeline offsets, display), wall offset,
 manual flag and the calibration session. Followers keep a cached copy on disk
-(`/var/lib/cyberspace2000/state.json`, atomic writes, at most every 10 s).
+(`/var/lib/phosphor2000/state.json`, atomic writes, at most every 10 s).
 
 ## Musical timeline
 

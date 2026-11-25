@@ -25,7 +25,7 @@ from typing import Callable, Sequence
 from backend.config import NetworkConfig
 from backend.network.base import EventKind, NetEvent, NetworkAdapter, RadioMode, RadioStatus, ScanEntry
 
-log = logging.getLogger("cs2k.nmcli")
+log = logging.getLogger("phos.nmcli")
 
 Runner = Callable[[Sequence[str], float], tuple[int, str, str]]
 
@@ -360,7 +360,7 @@ def _cli() -> None:  # pragma: no cover - exercised by scripts
 
     from backend.config import load_config
 
-    ap = argparse.ArgumentParser(description="write CYBERSPACE NetworkManager keyfiles")
+    ap = argparse.ArgumentParser(description="write PHOSPHOR NetworkManager keyfiles")
     ap.add_argument("--dir", default="/etc/NetworkManager/system-connections")
     a = ap.parse_args()
     cfg = load_config()

@@ -13,7 +13,7 @@ dashboard. Optional: Ethernet cable for maintenance.
 ## 1. Prepare SD cards (each Pi)
 
 1. Raspberry Pi Imager → **Raspberry Pi OS Lite (64-bit)**, Bookworm or Trixie.
-2. In the Imager's OS customisation: hostname `cs2k-pi-01` (…05), user + password, enable SSH,
+2. In the Imager's OS customisation: hostname `phos-pi-01` (…05), user + password, enable SSH,
    locale/timezone. Optionally configure your normal Wi-Fi for the first setup *or* use Ethernet.
 3. Boot each Pi once on HDMI or via SSH; `sudo apt update && sudo apt full-upgrade -y && sudo reboot`.
 
@@ -26,7 +26,7 @@ git clone https://github.com/FrissBrot/PHOSPHOR2000.git && cd PHOSPHOR2000
 scripts/install.sh --generate-secrets cluster-secrets.yaml
 ```
 
-This prints the Wi-Fi password for `CYBERSPACE-2000` and writes `cluster-secrets.yaml`
+This prints the Wi-Fi password for `PHOSPHOR2000` and writes `cluster-secrets.yaml`
 (WPA2 passphrase + 256-bit cluster key used to authenticate all node traffic). Copy the file to
 every Pi (scp / USB stick) and keep it private. All Pis **must** use the same file.
 
@@ -42,16 +42,16 @@ The node with the USB audio interface does **not** need to be the leader; but if
 audio Pi `pi-01` or `pi-02` so that the usual leader also has live audio.
 `--country` is your Wi-Fi regulatory domain (2 letters). You are asked for the admin dashboard
 password (≥ 8 chars) on the first Pi where it is not yet set; set it on every Pi
-(`sudo cyberspace-passwd`) — the dashboard you reach is whichever Pi is currently leader.
+(`sudo phosphor-passwd`) — the dashboard you reach is whichever Pi is currently leader.
 
 The installer (idempotent; re-run it any time):
 1. installs packages (`python3-venv`, `libportaudio2`, `network-manager`, `dnsmasq-base`, `cage`,
    `chromium`, `fonts-dejavu-core`, `nftables`, …)
-2. creates the system user `cyberspace` and `/opt/cyberspace2000`, `/etc/cyberspace2000`,
-   `/var/lib/cyberspace2000`; Python venv with pinned dependencies (`requirements-pi.txt`)
+2. creates the system user `phosphor` and `/opt/phosphor2000`, `/etc/phosphor2000`,
+   `/var/lib/phosphor2000`; Python venv with pinned dependencies (`requirements-pi.txt`)
 3. writes `node.yaml` and `secrets.yaml` (0600)
 4. installs systemd units and a polkit rule (only: NetworkManager control, restart of the
-   cyberspace units, reboot — no sudo, no shell)
+   phosphor units, reboot — no sudo, no shell)
 5. `configure-network.sh`: backups, country, AP + station keyfiles (`autoconnect=no`),
    Wi-Fi power save off
 6. `configure-crt.sh`: backups, composite PAL 720×576i 4:3, console blanking off
@@ -67,7 +67,7 @@ the boot scene.
 ## 4. Verify each Pi
 
 ```bash
-sudo /opt/cyberspace2000/scripts/diagnostics.sh | less
+sudo /opt/phosphor2000/scripts/diagnostics.sh | less
 ```
 
 Check: `Composite-1 connected` with mode `720x576i`, services active, `core health` ok, audio
@@ -77,7 +77,7 @@ card listed on the audio Pi, keyboard listed where plugged.
 
 1. Power all Pis at once (or in any order). Within ~25–40 s exactly one becomes leader (normally
    pi-01) and starts the AP; the others join.
-2. Connect your phone to Wi-Fi `CYBERSPACE-2000` and open **http://192.168.50.1:8080/admin/**.
+2. Connect your phone to Wi-Fi `PHOSPHOR2000` and open **http://192.168.50.1:8080/admin/**.
 3. Cluster tab: all nodes FOLLOWER/LEADER, sync uncertainty a few ms, fps ≈ 25.
 4. Config tab → *set cluster clock from this device* (Pi 3 has no RTC; otherwise the clock scene
    shows the last saved time).

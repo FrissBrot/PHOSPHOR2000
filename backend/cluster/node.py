@@ -1,4 +1,4 @@
-"""One CYBERSPACE node: election + clock sync + replicated musical state.
+"""One PHOSPHOR node: election + clock sync + replicated musical state.
 
 The class is pure logic driven by ``tick(local_now)`` and ``on_message(...)``
 with an injected ``send`` function and radio adapter, so the *same code* runs
@@ -27,7 +27,7 @@ from backend.sync.calibration import TapFilter, analyse_taps
 from backend.sync.clocksync import ClockSync
 from backend.sync.timeline import TapTempo, Timeline, TimingSource, reconcile
 
-log = logging.getLogger("cs2k.node")
+log = logging.getLogger("phos.node")
 
 Send = Callable[[dict, str | None], None]
 

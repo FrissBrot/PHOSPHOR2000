@@ -1,11 +1,11 @@
-// polkit: the unprivileged "cyberspace" user may switch Wi-Fi modes via
+// polkit: the unprivileged "phosphor" user may switch Wi-Fi modes via
 // NetworkManager, restart its own units and reboot. Nothing else.
 polkit.addRule(function(action, subject) {
-  if (subject.user != "cyberspace") return polkit.Result.NOT_HANDLED;
+  if (subject.user != "phosphor") return polkit.Result.NOT_HANDLED;
   if (action.id.indexOf("org.freedesktop.NetworkManager.") == 0) return polkit.Result.YES;
   if (action.id == "org.freedesktop.systemd1.manage-units") {
     var unit = action.lookup("unit"), verb = action.lookup("verb");
-    var ok = ["cyberspace-renderer.service", "cyberspace-audio.service", "cyberspace-core.service"];
+    var ok = ["phosphor-renderer.service", "phosphor-audio.service", "phosphor-core.service"];
     if (ok.indexOf(unit) >= 0 && verb == "restart") return polkit.Result.YES;
   }
   if (action.id == "org.freedesktop.login1.reboot" ||

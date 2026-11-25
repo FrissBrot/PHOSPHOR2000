@@ -1,6 +1,6 @@
 """Authenticated inter-node datagrams.
 
-Wire format: ``b"CS2K" | version(1) | hmac_sha256(16 bytes truncated) | zlib(json)``.
+Wire format: ``b"PHOS" | version(1) | hmac_sha256(16 bytes truncated) | zlib(json)``.
 The HMAC key is the cluster key from secrets.yaml (distinct from the Wi-Fi
 PSK). Replay protection: each sender includes a random ``boot`` id and a
 strictly increasing ``seq``; receivers drop non-increasing sequences per boot
@@ -17,7 +17,7 @@ import os
 import zlib
 from dataclasses import dataclass, field
 
-MAGIC = b"CS2K"
+MAGIC = b"PHOS"
 VERSION = 1
 TAG_LEN = 16
 MAX_DATAGRAM = 60000
@@ -79,5 +79,5 @@ class Codec:
 def derive_key(cluster_key: str) -> bytes:
     if not cluster_key:
         # Development default only; installer always generates a random key.
-        cluster_key = "cyberspace-2000-insecure-dev-key"
-    return hashlib.sha256(b"cs2k-udp|" + cluster_key.encode()).digest()
+        cluster_key = "phosphor2000-insecure-dev-key"
+    return hashlib.sha256(b"phos-udp|" + cluster_key.encode()).digest()

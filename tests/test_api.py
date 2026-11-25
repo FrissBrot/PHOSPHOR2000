@@ -56,7 +56,7 @@ def test_static_and_health(client):
 
 def test_auth_required_and_wrong_password(client):
     assert client.get("/api/status").status_code == 401
-    assert client.post("/api/cmd/set_bpm", json={"bpm": 120}, headers={"X-CS2K": "1"}).status_code == 401
+    assert client.post("/api/cmd/set_bpm", json={"bpm": 120}, headers={"X-PHOS": "1"}).status_code == 401
     assert client.post("/api/login", json={"password": "nope"}).status_code == 401
 
 
@@ -68,12 +68,12 @@ def test_rate_limit(client):
 def test_csrf_header_required(client):
     login(client)
     assert client.post("/api/cmd/set_bpm", json={"bpm": 128}).status_code == 403
-    assert client.post("/api/cmd/set_bpm", json={"bpm": 128}, headers={"X-CS2K": "1"}).status_code == 200
+    assert client.post("/api/cmd/set_bpm", json={"bpm": 128}, headers={"X-PHOS": "1"}).status_code == 200
 
 
 def test_validation(client, core):
     login(client)
-    h = {"X-CS2K": "1"}
+    h = {"X-PHOS": "1"}
     assert client.post("/api/cmd/set_bpm", json={"bpm": 1000}, headers=h).status_code == 422
     assert client.post("/api/cmd/set_bpm", json={"bpm": 120, "evil": 1}, headers=h).status_code == 422
     assert client.post("/api/cmd/scene", json={"scene": "rm -rf"}, headers=h).status_code == 422
@@ -87,7 +87,7 @@ def test_validation(client, core):
 
 def test_commands_change_cluster_state(client, core):
     login(client)
-    h = {"X-CS2K": "1"}
+    h = {"X-PHOS": "1"}
     client.post("/api/cmd/set_bpm", json={"bpm": 133.5}, headers=h)
     assert core.node.timeline.bpm == 133.5 and core.node.timeline.source.value == "MANUAL"
     r = client.post("/api/cmd/scene", json={"scene": "rain", "quantize": "beat"}, headers=h).json()
@@ -100,7 +100,7 @@ def test_commands_change_cluster_state(client, core):
 
 def test_calibration_flow_over_api(client, core):
     login(client)
-    h = {"X-CS2K": "1"}
+    h = {"X-PHOS": "1"}
     s = client.post("/api/cmd/cal_start", json={"mode": "single", "target": "pi-01", "bpm": 120}, headers=h).json()
     origin = s["origin"]
     # taps that lag the scheduled flash by 30 ms, with jitter, plus a key repeat and a double press
@@ -133,11 +133,11 @@ def test_export_import_roundtrip(client, core):
     exp = client.get("/api/config/export").json()
     exp["shared"]["scenes"]["countdown_label"] = "PARTY"
     exp["shared"]["calibration"]["offsets_ms"] = {"pi-02": -12.5}
-    r = client.post("/api/config/import", content=json.dumps(exp), headers={"X-CS2K": "1"})
+    r = client.post("/api/config/import", content=json.dumps(exp), headers={"X-PHOS": "1"})
     assert r.status_code == 200
     assert core.node.shared.scenes.countdown_label == "PARTY"
     assert core.node.shared.calibration.offsets_ms == {"pi-02": -12.5}
-    bad = client.post("/api/config/import", content=b'{"shared": {"scenes": {"intensity": 9}}}', headers={"X-CS2K": "1"})
+    bad = client.post("/api/config/import", content=b'{"shared": {"scenes": {"intensity": 9}}}', headers={"X-PHOS": "1"})
     assert bad.status_code == 422
 
 

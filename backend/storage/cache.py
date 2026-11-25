@@ -13,7 +13,7 @@ import threading
 import time
 from pathlib import Path
 
-log = logging.getLogger("cs2k.storage")
+log = logging.getLogger("phos.storage")
 
 
 def boot_id() -> str:

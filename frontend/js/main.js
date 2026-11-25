@@ -11,7 +11,7 @@ const params = new URLSearchParams(location.search);
 const canvas = document.getElementById("screen");
 const clock = new BrowserClock();
 const renderer = new Renderer(canvas, clock);
-window.__cs2k = renderer;
+window.__phos = renderer;
 
 function demoState(scene) {
   const segs = [];

@@ -21,7 +21,7 @@ from backend.config import REPO_ROOT, SharedConfig
 if TYPE_CHECKING:
     from backend.services.core import Core
 
-log = logging.getLogger("cs2k.api")
+log = logging.getLogger("phos.api")
 FRONTEND = REPO_ROOT / "frontend"
 ADMIN = REPO_ROOT / "admin"
 LOCAL_HOSTS = {"127.0.0.1", "::1", "localhost", "testclient"}
@@ -37,7 +37,7 @@ SECURITY_HEADERS = {
 
 
 def create_app(core: "Core") -> FastAPI:
-    app = FastAPI(title="CYBERSPACE 2000", docs_url=None, redoc_url=None, openapi_url=None)
+    app = FastAPI(title="PHOSPHOR2000", docs_url=None, redoc_url=None, openapi_url=None)
     sessions = Sessions(core.cfg.secrets.session_secret)
     limiter = RateLimiter()
     pw_hash = core.cfg.secrets.admin_password_hash
@@ -82,7 +82,7 @@ def create_app(core: "Core") -> FastAPI:
         if not limiter.allow(ip) or not limiter.allow("*global*"):
             raise HTTPException(429, "too many attempts, wait a minute")
         if not pw_hash:
-            raise HTTPException(503, "no admin password configured: run `sudo cyberspace-passwd` on the Pi")
+            raise HTTPException(503, "no admin password configured: run `sudo phosphor-passwd` on the Pi")
         ok = await asyncio.get_running_loop().run_in_executor(None, verify_password, body.password, pw_hash)
         if not ok:
             node._log("warning", f"failed admin login from {ip}")
@@ -173,9 +173,9 @@ def create_app(core: "Core") -> FastAPI:
     @app.get("/api/config/export")
     async def export_config(request: Request):
         require(request)
-        data = {"format": "cyberspace-2000/shared-config", "version": 1, "shared_rev": node.shared_rev,
+        data = {"format": "phosphor2000/shared-config", "version": 1, "shared_rev": node.shared_rev,
                 "exported_by": node.id, "shared": node.shared.model_dump()}
-        return JSONResponse(data, headers={"Content-Disposition": "attachment; filename=cyberspace-config.json"})
+        return JSONResponse(data, headers={"Content-Disposition": "attachment; filename=phosphor-config.json"})
 
     @app.post("/api/config/import")
     async def import_config(request: Request):

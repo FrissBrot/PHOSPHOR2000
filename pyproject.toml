@@ -3,7 +3,7 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "cyberspace-2000"
+name = "phosphor2000"
 version = "0.1.0"
 description = "Distributed offline retro-green CRT visual system for Raspberry Pi 3 clusters"
 readme = "README.md"
@@ -25,11 +25,11 @@ audio = ["sounddevice==0.5.2"]
 dev = ["pytest==9.2.0", "pytest-asyncio==1.5.0", "httpx==0.28.1"]
 
 [project.scripts]
-cyberspace-core = "backend.services.core:main"
-cyberspace-audio = "backend.audio.service:main"
-cyberspace-input = "backend.services.input_service:main"
-cyberspace-sim = "backend.cluster.simulation:main"
-cyberspace-passwd = "backend.api.auth:passwd_main"
+phosphor-core = "backend.services.core:main"
+phosphor-audio = "backend.audio.service:main"
+phosphor-input = "backend.services.input_service:main"
+phosphor-sim = "backend.cluster.simulation:main"
+phosphor-passwd = "backend.api.auth:passwd_main"
 
 [tool.setuptools.packages.find]
 include = ["backend*"]

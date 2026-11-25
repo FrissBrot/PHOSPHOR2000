@@ -1,8 +1,8 @@
 #!/bin/bash
-# Started by cyberspace-renderer.service inside cage. Waits for the local core,
+# Started by phosphor-renderer.service inside cage. Waits for the local core,
 # clears Chromium's crash flag (no "restore pages" bubble) and execs Chromium.
 set -u
-PROFILE=/var/lib/cyberspace2000/chromium
+PROFILE=/var/lib/phosphor2000/chromium
 URL="http://127.0.0.1:8080/"
 mkdir -p "$PROFILE"
 for i in $(seq 1 60); do
@@ -15,12 +15,12 @@ if [ -f "$PREF" ]; then
 fi
 BROWSER=$(command -v chromium || command -v chromium-browser)
 EXTRA=()
-[ -f /etc/cyberspace2000/chromium-flags ] && mapfile -t EXTRA < <(grep -v '^\s*#' /etc/cyberspace2000/chromium-flags | grep -v '^\s*$')
+[ -f /etc/phosphor2000/chromium-flags ] && mapfile -t EXTRA < <(grep -v '^\s*#' /etc/phosphor2000/chromium-flags | grep -v '^\s*$')
 exec "$BROWSER" \
   --kiosk "$URL" \
   --ozone-platform=wayland \
   --user-data-dir="$PROFILE" \
-  --disk-cache-dir=/tmp/cs2k-chromium-cache \
+  --disk-cache-dir=/tmp/phos-chromium-cache \
   --noerrdialogs --disable-infobars --no-first-run --no-default-browser-check \
   --disable-session-crashed-bubble --disable-features=Translate,TranslateUI,MediaRouter,OptimizationHints \
   --check-for-update-interval=31536000 --disable-component-update --disable-background-networking \

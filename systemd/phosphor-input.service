@@ -1,0 +1,24 @@
+[Unit]
+Description=PHOSPHOR2000 keyboard (evdev, monotonic timestamps) for calibration
+After=phosphor-core.service
+PartOf=phosphor.target
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+User=phosphor
+Group=phosphor
+SupplementaryGroups=input
+WorkingDirectory=/opt/phosphor2000
+Environment=PYTHONUNBUFFERED=1 PHOSPHOR_RUN=/run/phosphor2000
+ExecStart=/opt/phosphor2000/venv/bin/python -m backend.services.input_service
+Restart=always
+RestartSec=3
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+ReadWritePaths=/run/phosphor2000
+
+[Install]
+WantedBy=phosphor.target

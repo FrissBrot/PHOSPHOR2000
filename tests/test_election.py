@@ -81,7 +81,7 @@ def test_boot_discovery_backoff_hotspot_leader():
 def test_join_existing_hotspot_and_no_preemption():
     e, ad, _ = mk("pi-01")  # highest priority node returns
     e.tick(0)
-    e.handle_net_event(NetEvent(EventKind.SCAN_RESULT, [ScanEntry("CYBERSPACE-2000", "BB:BB", 60)]), 2)
+    e.handle_net_event(NetEvent(EventKind.SCAN_RESULT, [ScanEntry("PHOSPHOR2000", "BB:BB", 60)]), 2)
     assert e.state == NodeState.RECONNECTING and ("sta", "BB:BB") in ad.calls
     e.handle_net_event(NetEvent(EventKind.CONNECTED, {"bssid": "BB:BB"}), 5)
     e.on_message({"t": "beacon", "_from": "pi-02", "id": "pi-02", "prio": 90, "state": "LEADER",
@@ -146,8 +146,8 @@ def test_follower_reports_foreign_ap_and_leader_orders_scout():
     f.leader = LeaderClaim(1, 100, "pi-01")
     f.leader_bssid = "AA:AA"
     f.leader_seen = 0
-    f.handle_net_event(NetEvent(EventKind.SCAN_RESULT, [ScanEntry("CYBERSPACE-2000", "AA:AA", 80),
-                                                        ScanEntry("CYBERSPACE-2000", "EE:EE", 40)]), 1)
+    f.handle_net_event(NetEvent(EventKind.SCAN_RESULT, [ScanEntry("PHOSPHOR2000", "AA:AA", 80),
+                                                        ScanEntry("PHOSPHOR2000", "EE:EE", 40)]), 1)
     assert fsent[-1] == ({"t": "foreign_ap", "bssids": ["EE:EE"]}, "pi-01")
     l, lad, lsent = mk("pi-01")
     l.state = NodeState.LEADER

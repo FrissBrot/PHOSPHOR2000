@@ -19,7 +19,7 @@ import pytest
 pw = pytest.importorskip("playwright.sync_api")
 
 ADMIN_PW = "test-password-123"
-OUT = Path(os.environ.get("CS2K_ARTIFACTS", "/tmp/cs2k-artifacts"))
+OUT = Path(os.environ.get("PHOS_ARTIFACTS", "/tmp/phos-artifacts"))
 
 
 def free_port() -> int:
@@ -73,7 +73,7 @@ def server(tmp_path_factory):
 @pytest.fixture(scope="module")
 def browser():
     with pw.sync_playwright() as p:
-        exe = os.environ.get("CS2K_CHROMIUM")
+        exe = os.environ.get("PHOS_CHROMIUM")
         if not exe:  # fall back to any cached Playwright chromium build
             import glob
             found = sorted(glob.glob(os.path.expanduser(
@@ -103,7 +103,7 @@ def test_scene_renders_without_errors(server, browser, scene):
     page.wait_for_timeout(2500)
     OUT.mkdir(parents=True, exist_ok=True)
     page.screenshot(path=str(OUT / f"scene-{scene}.png"))
-    frames = page.evaluate("window.__cs2k.frames")
+    frames = page.evaluate("window.__phos.frames")
     page.close()
     assert not errors, errors
     assert frames > 20
@@ -122,9 +122,9 @@ def test_full_stack_and_browser_restart(server, browser):
     errors: list[str] = []
     page.on("pageerror", lambda e: errors.append(str(e)))
     page.goto(base + "/")
-    page.wait_for_function("window.__cs2k && window.__cs2k.state && window.__cs2k.clock.ready()", timeout=10000)
+    page.wait_for_function("window.__phos && window.__phos.state && window.__phos.clock.ready()", timeout=10000)
     page.wait_for_timeout(3000)
-    beat1 = page.evaluate("window.__cs2k.timeline.beatAt(window.__cs2k.clock.clusterAt(performance.now()))")
+    beat1 = page.evaluate("window.__phos.timeline.beatAt(window.__phos.clock.clusterAt(performance.now()))")
     # backend beat at the same moment
     now_c = core.node.cluster_now(time.monotonic())
     beat_srv = core.node.timeline.beat_at(now_c)
@@ -135,8 +135,8 @@ def test_full_stack_and_browser_restart(server, browser):
     page.close()
     page2 = ctx.new_page()
     page2.goto(base + "/")
-    page2.wait_for_function("window.__cs2k && window.__cs2k.state", timeout=3000)
-    seg1 = page2.evaluate("window.__cs2k.state.segments[0].seed")
+    page2.wait_for_function("window.__phos && window.__phos.state", timeout=3000)
+    seg1 = page2.evaluate("window.__phos.state.segments[0].seed")
     assert seg1 == core.node.render_state(time.monotonic())["segments"][0]["seed"]
     ctx.close()
     assert not errors, errors

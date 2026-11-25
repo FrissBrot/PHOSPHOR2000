@@ -1,7 +1,7 @@
-# CYBERSPACE 2000 — cluster defaults.
-# Node-specific overrides live in /etc/cyberspace2000/node.yaml,
+# PHOSPHOR2000 — cluster defaults.
+# Node-specific overrides live in /etc/phosphor2000/node.yaml,
 # secrets (Wi-Fi PSK, cluster key, admin password hash) in
-# /etc/cyberspace2000/secrets.yaml (mode 0600). Never put secrets here.
+# /etc/phosphor2000/secrets.yaml (mode 0600). Never put secrets here.
 
 node:
   # Overridden per device. IDs must be unique and persistent (pi-01..pi-05).
@@ -13,13 +13,13 @@ node:
 network:
   manage: true                 # false = never touch NetworkManager (safe mode)
   interface: wlan0
-  ssid: CYBERSPACE-2000
+  ssid: PHOSPHOR2000
   gateway: 192.168.50.1
   prefix: 24
   band: bg                     # 2.4 GHz works on Pi 3 B and B+
   channel: 6
-  ap_connection: cyberspace-ap
-  sta_connection: cyberspace-sta
+  ap_connection: phosphor-ap
+  sta_connection: phosphor-sta
   # Election / failure detection timing (seconds)
   beacon_interval: 1.0
   suspect_after: 3.5           # no leader beacon -> SUSPECTED_FAILURE

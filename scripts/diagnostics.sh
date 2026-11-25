@@ -1,7 +1,7 @@
 #!/bin/bash
 # Read-only health report for one Pi. Secrets are never printed.
 #   sudo scripts/diagnostics.sh [--json-only]
-CS2K_PREFIX=${CS2K_PREFIX:-/opt/cyberspace2000}
+PHOS_PREFIX=${PHOS_PREFIX:-/opt/phosphor2000}
 HERE=$(dirname "$0")
 sec() { printf '\n\033[32m=== %s ===\033[0m\n' "$*"; }
 
@@ -20,12 +20,12 @@ sec "display (composite)"
 sec "network"
 "$HERE/configure-network.sh" --status 2>/dev/null || true
 ip -br addr
-for f in /boot/firmware/cyberspace-safe-mode /boot/cyberspace-safe-mode /etc/cyberspace2000/safe-mode; do
+for f in /boot/firmware/phosphor-safe-mode /boot/phosphor-safe-mode /etc/phosphor2000/safe-mode; do
   [ -e "$f" ] && echo "SAFE MODE FLAG PRESENT: $f (radio not managed)"
 done
 
 sec "services"
-for u in cyberspace-core cyberspace-audio cyberspace-input cyberspace-renderer cyberspace-firewall; do
+for u in phosphor-core phosphor-audio phosphor-input phosphor-renderer phosphor-firewall; do
   printf '%-24s %s\n' "$u" "$(systemctl is-active $u 2>/dev/null)"
 done
 ss -lntup 2>/dev/null | grep -E ':8080|:47800' || true
@@ -41,9 +41,9 @@ sec "input devices"
 grep -E '^N: |^H: ' /proc/bus/input/devices | paste - - | grep -i kbd || echo "no keyboard"
 
 sec "configuration (secrets masked)"
-cat /etc/cyberspace2000/node.yaml 2>/dev/null
-[ -f /etc/cyberspace2000/secrets.yaml ] && sed -E 's/:.*/: ***/' /etc/cyberspace2000/secrets.yaml
-ls -l /etc/cyberspace2000/ 2>/dev/null
+cat /etc/phosphor2000/node.yaml 2>/dev/null
+[ -f /etc/phosphor2000/secrets.yaml ] && sed -E 's/:.*/: ***/' /etc/phosphor2000/secrets.yaml
+ls -l /etc/phosphor2000/ 2>/dev/null
 
 sec "recent errors"
-journalctl -u 'cyberspace-*' -p warning -n 40 --no-pager 2>/dev/null || true
+journalctl -u 'phosphor-*' -p warning -n 40 --no-pager 2>/dev/null || true

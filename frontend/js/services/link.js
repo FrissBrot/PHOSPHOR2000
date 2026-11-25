@@ -1,7 +1,7 @@
 // WebSocket link to the local core with reconnect and a localStorage cache,
 // so a restarted browser renders immediately from the last known state even
 // if the core is (re)starting. The renderer never waits for the network.
-const CACHE_KEY = "cs2k.render_state.v1";
+const CACHE_KEY = "phos.render_state.v1";
 
 export class Link {
   constructor(clock, onState, onFeatures) {

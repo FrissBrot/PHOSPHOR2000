@@ -1,4 +1,4 @@
-// CYBERSPACE 2000 admin dashboard. Vanilla JS, no external resources.
+// PHOSPHOR2000 admin dashboard. Vanilla JS, no external resources.
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 const SCENES = ["boot", "dance", "spectrum", "grid", "rain", "countdown"];
@@ -25,7 +25,7 @@ function toast(msg, ok = false) {
 }
 
 async function api(path, body, method = "POST") {
-  const opt = { method, headers: { "X-CS2K": "1" }, credentials: "same-origin" };
+  const opt = { method, headers: { "X-PHOS": "1" }, credentials: "same-origin" };
   if (body !== undefined) { opt.headers["Content-Type"] = "application/json"; opt.body = JSON.stringify(body); }
   const r = await fetch(path, opt);
   let data = null;
@@ -314,7 +314,7 @@ $("#importFile").addEventListener("change", async (ev) => {
   const f = ev.target.files[0]; if (!f) return;
   const text = await f.text();
   try {
-    const r = await fetch("/api/config/import", { method: "POST", headers: { "X-CS2K": "1", "Content-Type": "application/json" }, body: text });
+    const r = await fetch("/api/config/import", { method: "POST", headers: { "X-PHOS": "1", "Content-Type": "application/json" }, body: text });
     const d = await r.json();
     $("#cfgMsg").textContent = r.ok ? `imported (rev ${d.shared_rev ?? "?"})` : `import failed: ${d.detail}`;
   } catch (e) { $("#cfgMsg").textContent = "import failed"; }
@@ -339,7 +339,7 @@ async function start() {
   const s = await fetch("/api/session").then((r) => r.json());
   if (!s.authenticated) {
     showLogin();
-    if (!s.password_configured) $("#loginMsg").textContent = "No admin password set. On the Pi run: sudo cyberspace-passwd";
+    if (!s.password_configured) $("#loginMsg").textContent = "No admin password set. On the Pi run: sudo phosphor-passwd";
     return;
   }
   showApp();

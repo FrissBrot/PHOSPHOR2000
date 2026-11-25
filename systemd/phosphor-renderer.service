@@ -1,17 +1,17 @@
 # Chromium kiosk inside the cage Wayland compositor on tty1 (no desktop needed).
 [Unit]
-Description=CYBERSPACE 2000 renderer (cage + Chromium kiosk)
-After=cyberspace-core.service systemd-user-sessions.service plymouth-quit-wait.service
-Wants=cyberspace-core.service
+Description=PHOSPHOR2000 renderer (cage + Chromium kiosk)
+After=phosphor-core.service systemd-user-sessions.service plymouth-quit-wait.service
+Wants=phosphor-core.service
 Conflicts=getty@tty1.service
 After=getty@tty1.service
-PartOf=cyberspace.target
+PartOf=phosphor.target
 StartLimitIntervalSec=0
 
 [Service]
 Type=simple
-User=cyberspace
-PAMName=cyberspace-kiosk
+User=phosphor
+PAMName=phosphor-kiosk
 TTYPath=/dev/tty1
 TTYReset=yes
 TTYVHangup=yes
@@ -22,9 +22,9 @@ StandardError=journal
 UtmpIdentifier=tty1
 UtmpMode=user
 Environment=XDG_SESSION_TYPE=wayland WLR_LIBINPUT_NO_DEVICES=1
-ExecStart=/usr/bin/cage -d -- /opt/cyberspace2000/scripts/kiosk-launch.sh
+ExecStart=/usr/bin/cage -d -- /opt/phosphor2000/scripts/kiosk-launch.sh
 Restart=always
 RestartSec=3
 
 [Install]
-WantedBy=cyberspace.target
+WantedBy=phosphor.target

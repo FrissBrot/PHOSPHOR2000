@@ -2,8 +2,8 @@
 
 Layering (later wins):
   1. config/default.yaml               (repo defaults)
-  2. /etc/cyberspace2000/node.yaml      (node identity / local overrides)
-  3. /etc/cyberspace2000/secrets.yaml   (0600: Wi-Fi PSK, cluster key, admin hash)
+  2. /etc/phosphor2000/node.yaml      (node identity / local overrides)
+  3. /etc/phosphor2000/secrets.yaml   (0600: Wi-Fi PSK, cluster key, admin hash)
 
 The ``SharedConfig`` part (scenes, safety, calibration, timeline offsets) is
 replicated across the cluster with a revision number; the leader is the
@@ -22,8 +22,8 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_CONFIG = REPO_ROOT / "config" / "default.yaml"
-ETC_DIR = Path(os.environ.get("CYBERSPACE_ETC", "/etc/cyberspace2000"))
-STATE_DIR = Path(os.environ.get("CYBERSPACE_STATE", "/var/lib/cyberspace2000"))
+ETC_DIR = Path(os.environ.get("PHOSPHOR_ETC", "/etc/phosphor2000"))
+STATE_DIR = Path(os.environ.get("PHOSPHOR_STATE", "/var/lib/phosphor2000"))
 
 NODE_ID_RE = re.compile(r"^pi-0[1-9]$")
 SCENES = ("boot", "dance", "spectrum", "grid", "rain", "countdown", "calibration")
@@ -50,13 +50,13 @@ class NodeConfig(Strict):
 class NetworkConfig(Strict):
     manage: bool = True
     interface: str = Field("wlan0", pattern=r"^[a-zA-Z0-9_.-]{1,15}$")
-    ssid: str = Field("CYBERSPACE-2000", min_length=1, max_length=32)
+    ssid: str = Field("PHOSPHOR2000", min_length=1, max_length=32)
     gateway: str = Field("192.168.50.1", pattern=r"^\d{1,3}(\.\d{1,3}){3}$")
     prefix: int = Field(24, ge=8, le=30)
     band: Literal["bg", "a"] = "bg"
     channel: int = Field(6, ge=1, le=165)
-    ap_connection: str = Field("cyberspace-ap", pattern=r"^[a-zA-Z0-9_-]{1,32}$")
-    sta_connection: str = Field("cyberspace-sta", pattern=r"^[a-zA-Z0-9_-]{1,32}$")
+    ap_connection: str = Field("phosphor-ap", pattern=r"^[a-zA-Z0-9_-]{1,32}$")
+    sta_connection: str = Field("phosphor-sta", pattern=r"^[a-zA-Z0-9_-]{1,32}$")
     beacon_interval: float = Field(1.0, gt=0.05, le=10)
     suspect_after: float = Field(3.5, gt=0)
     failure_after: float = Field(8.0, gt=0)

@@ -13,7 +13,7 @@
 
 ## Addressing
 
-Every leader runs the AP `CYBERSPACE-2000` (WPA2-PSK, CCMP) with **gateway 192.168.50.1/24**
+Every leader runs the AP `PHOSPHOR2000` (WPA2-PSK, CCMP) with **gateway 192.168.50.1/24**
 and DHCP (NetworkManager `ipv4.method=shared`, dnsmasq). The admin URL is therefore always
 `http://192.168.50.1:8080`, whoever leads. Followers get DHCP addresses; nodes are identified by
 their persistent id (`pi-01` … `pi-05`), never by IP.
@@ -23,9 +23,9 @@ their persistent id (`pi-01` … `pi-05`), never by IP.
 | state | meaning | leaves to |
 |---|---|---|
 | `BOOTING` | process start, cache restored | DISCOVERING |
-| `DISCOVERING` | scanning for `CYBERSPACE-2000` (10 s after boot, 4 s after a failure) | RECONNECTING (found) / ELECTION_BACKOFF |
+| `DISCOVERING` | scanning for `PHOSPHOR2000` (10 s after boot, 4 s after a failure) | RECONNECTING (found) / ELECTION_BACKOFF |
 | `ELECTION_BACKOFF` | no AP found; wait `rank × 8 s + jitter`, keep scanning | RECONNECTING (someone else won) / STARTING_HOTSPOT |
-| `STARTING_HOTSPOT` | `nmcli connection up cyberspace-ap` | LEADER / DISCOVERING (failed) / DEGRADED (3 failures) |
+| `STARTING_HOTSPOT` | `nmcli connection up phosphor-ap` | LEADER / DISCOVERING (failed) / DEGRADED (3 failures) |
 | `LEADER` | owns the AP, authority for replicated state | RECONNECTING (yield/handover) / STARTING_HOTSPOT (link lost) |
 | `RECONNECTING` | associating as station (optionally pinned to a BSSID) | RECOVERING (leader beacon heard) / DISCOVERING |
 | `RECOVERING` | comparing revisions, adopting leader state (slew/defer) | FOLLOWER |
@@ -101,10 +101,10 @@ still drops for ~10–25 s (radio switch + re-association); rendering continues.
 ## Recovery plans (when networking goes wrong)
 
 1. **Ethernet is never touched.** Plug a cable in and SSH to the Pi.
-2. **Safe mode**: create an empty file `cyberspace-safe-mode` on the boot partition (readable
+2. **Safe mode**: create an empty file `phosphor-safe-mode` on the boot partition (readable
    from any PC: `/boot/firmware/` on the Pi). The core will not touch the radio; the node renders
    standalone or follows over an externally configured network.
-3. `sudo /opt/cyberspace2000/scripts/configure-network.sh --rollback` restores the
+3. `sudo /opt/phosphor2000/scripts/configure-network.sh --rollback` restores the
    NetworkManager connections and config exactly as before the first install.
-4. `network.manage: false` in `/etc/cyberspace2000/node.yaml` permanently switches to
+4. `network.manage: false` in `/etc/phosphor2000/node.yaml` permanently switches to
    external-network mode (venue router or Ethernet switch, all nodes on one L2 network).

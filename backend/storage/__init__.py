@@ -1,1 +1,1 @@
-"""CYBERSPACE 2000."""
+"""PHOSPHOR2000."""

@@ -197,7 +197,7 @@ export class Renderer {
     const ctx = this.ctx;
     ctx.fillStyle = "#000"; ctx.fillRect(0, 0, W, H);
     ctx.fillStyle = GREEN; ctx.font = font(24);
-    ctx.fillText("CYBERSPACE 2000", 60, 200);
+    ctx.fillText("PHOSPHOR2000", 60, 200);
     ctx.font = font(16);
     ctx.fillText("CONNECTING TO LOCAL CORE" + ".".repeat(Math.floor(ts / 400) % 4), 60, 240);
   }

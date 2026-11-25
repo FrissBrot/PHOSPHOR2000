@@ -1,4 +1,4 @@
-"""cyberspace-audio: USB line-in capture + beat tracking, feeding the local core.
+"""phosphor-audio: USB line-in capture + beat tracking, feeding the local core.
 
 Real-time rules:
 * the PortAudio callback only copies the block and stamps it, then
@@ -30,8 +30,8 @@ import numpy as np
 from backend.audio.analysis import AudioParams, BeatTracker
 from backend.config import AudioConfig, load_config
 
-log = logging.getLogger("cs2k.audio")
-SOCK = Path(os.environ.get("CYBERSPACE_RUN", "/run/cyberspace2000")) / "core.sock"
+log = logging.getLogger("phos.audio")
+SOCK = Path(os.environ.get("PHOSPHOR_RUN", "/run/phosphor2000")) / "core.sock"
 
 
 class CoreLink:
@@ -213,7 +213,7 @@ def run_file(path: Path, cfg: AudioConfig, link: CoreLink, realtime: bool = True
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(description="CYBERSPACE 2000 audio engine")
+    ap = argparse.ArgumentParser(description="PHOSPHOR2000 audio engine")
     ap.add_argument("--file", type=Path, help="analyse a WAV file in real time instead of the USB input")
     ap.add_argument("--list", action="store_true", help="list capture devices and exit")
     a = ap.parse_args()

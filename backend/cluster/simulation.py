@@ -1,4 +1,4 @@
-"""Discrete-event simulator for a CYBERSPACE cluster.
+"""Discrete-event simulator for a PHOSPHOR cluster.
 
 Runs the *real* ``ClusterNode`` logic (election, clock sync, replication,
 scheduler) against simulated radios, Wi-Fi latency/loss, independent drifting
@@ -386,7 +386,7 @@ class SimWorld:
 
 
 def main() -> None:  # pragma: no cover - demo CLI
-    ap = argparse.ArgumentParser(description="CYBERSPACE 2000 cluster simulation")
+    ap = argparse.ArgumentParser(description="PHOSPHOR2000 cluster simulation")
     ap.add_argument("--nodes", type=int, default=3)
     ap.add_argument("--seed", type=int, default=1)
     ap.add_argument("--scenario", choices=["boot", "failover", "partition"], default="failover")

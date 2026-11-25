@@ -1,0 +1,7 @@
+[Unit]
+Description=PHOSPHOR2000 (all services)
+Wants=phosphor-core.service phosphor-audio.service phosphor-input.service phosphor-renderer.service
+After=network.target
+
+[Install]
+WantedBy=multi-user.target
