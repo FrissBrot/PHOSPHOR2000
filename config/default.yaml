@@ -1,0 +1,113 @@
+# CYBERSPACE 2000 — cluster defaults.
+# Node-specific overrides live in /etc/cyberspace2000/node.yaml,
+# secrets (Wi-Fi PSK, cluster key, admin password hash) in
+# /etc/cyberspace2000/secrets.yaml (mode 0600). Never put secrets here.
+
+node:
+  # Overridden per device. IDs must be unique and persistent (pi-01..pi-05).
+  id: pi-01
+  priority: 100
+  # Default priority table used by the installer when only an id is given.
+  priority_table: { pi-01: 100, pi-02: 90, pi-03: 80, pi-04: 70, pi-05: 60 }
+
+network:
+  manage: true                 # false = never touch NetworkManager (safe mode)
+  interface: wlan0
+  ssid: CYBERSPACE-2000
+  gateway: 192.168.50.1
+  prefix: 24
+  band: bg                     # 2.4 GHz works on Pi 3 B and B+
+  channel: 6
+  ap_connection: cyberspace-ap
+  sta_connection: cyberspace-sta
+  # Election / failure detection timing (seconds)
+  beacon_interval: 1.0
+  suspect_after: 3.5           # no leader beacon -> SUSPECTED_FAILURE
+  failure_after: 8.0           # still nothing -> leader considered lost
+  discovery_window: 10.0       # initial scan window after boot
+  backoff_slot: 6.0            # staggered backoff per priority rank
+  backoff_jitter: 1.0
+  min_leader_tenure: 20.0      # a leader never yields for less-ranked reasons before this
+  yield_holddown: 30.0         # a node that yielded may not start an AP for this long
+  hotspot_start_timeout: 25.0
+  connect_timeout: 20.0
+  degraded_retry: 30.0
+  udp_port: 47800              # beacons, time sync, replication (HMAC-signed)
+  local_port: 47810            # 127.0.0.1 only: audio/input helpers -> core
+
+server:
+  host: 0.0.0.0
+  port: 8080
+  render_local_only: true      # renderer WebSocket only from 127.0.0.1
+
+sync:
+  ping_interval: 1.0
+  burst_count: 6               # fast pings after (re)connect
+  window: 32                   # samples kept for offset estimation
+  max_slew_ppm: 2000           # 2 ms per second
+  step_threshold: 0.050        # larger errors are stepped (renderer defers to bar)
+  outlier_delay_factor: 2.0
+
+timeline:
+  default_bpm: 120.0
+  beats_per_bar: 4
+  min_bpm: 60.0
+  max_bpm: 200.0
+  # Corrections below this are slewed, larger ones deferred to a bar boundary.
+  slew_threshold_beats: 0.06
+  slew_duration_beats: 4.0
+  # Global audio-to-visual offset in ms. Negative = visuals earlier.
+  global_visual_offset_ms: 0.0
+  # Assumed rAF -> photon latency for a PAL composite CRT (ms). Measure it!
+  display_latency_ms: 40.0
+  schedule_lead_s: 0.6         # manual changes take effect no sooner than this
+
+scenes:
+  mode: GLOBAL                 # GLOBAL | INDIVIDUAL | CHOREOGRAPHED
+  quantize: bar                # bar | beat | eighth | sixteenth
+  playlist:
+    - { scene: boot, bars: 8 }
+    - { scene: dance, bars: 16 }
+    - { scene: spectrum, bars: 16 }
+    - { scene: grid, bars: 16 }
+    - { scene: rain, bars: 16 }
+    - { scene: countdown, bars: 8 }
+  individual: {}               # node_id -> {scene: name} or {playlist: [...], rotate: n}
+  choreography:                # list of steps; each maps node -> scene ("*" = default)
+    - { bars: 8, assign: { "*": dance } }
+    - { bars: 8, pattern: rotate, scenes: [rain, grid, spectrum, dance, countdown] }
+    - { bars: 8, pattern: alternate, scenes: [spectrum, rain] }
+  countdown_target: "2027-01-01T00:00:00"
+  countdown_label: "Y2K+27"
+  intensity: 0.8               # 0..1 global visual intensity
+
+safety:
+  reduced_flashing: false
+  max_flash_hz: 3.0            # hard cap on full-screen luminance flips
+  max_flash_luminance: 0.85    # 0..1 cap for full-screen flashes
+
+calibration:
+  bpm: 120.0
+  min_taps: 16
+  max_taps: 32
+  outlier_ms: 150.0
+  double_press_fraction: 0.35  # taps closer than this fraction of a beat are ignored
+  offsets_ms: {}               # node_id -> visual offset (replicated, persisted)
+
+display:
+  virtual_width: 640
+  virtual_height: 480
+  overscan: { top: 0.06, bottom: 0.06, left: 0.07, right: 0.07 }
+  fps_cap: 25                  # PAL: 50 fields/s -> 25 full frames/s
+
+audio:
+  enabled: auto                # auto = only if a USB capture device exists
+  device: null                 # ALSA name substring, e.g. "USB"
+  samplerate: 48000
+  blocksize: 512
+  channels: 1
+  silence_rms: 0.003
+  silence_hold_s: 2.5
+  input_latency_ms: null       # null = trust PortAudio report
+  min_bpm: 80.0
+  max_bpm: 180.0
