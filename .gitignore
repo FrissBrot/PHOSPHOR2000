@@ -1,0 +1,23 @@
+# Tooling / local
+.context-compress/
+.claude/settings.local.json
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# Dependencies / build
+node_modules/
+dist/
+build/
+__pycache__/
+*.pyc
+.venv/
