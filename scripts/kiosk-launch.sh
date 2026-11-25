@@ -2,7 +2,8 @@
 # Started by phosphor-renderer.service inside cage. Waits for the local core,
 # clears Chromium's crash flag (no "restore pages" bubble) and execs Chromium.
 set -u
-PROFILE=/var/lib/phosphor2000/chromium
+# Profile and cache live in RAM (/run): no SD writes from Chromium, clean profile after power loss.
+PROFILE=/run/phosphor2000/chromium
 URL="http://127.0.0.1:8080/"
 mkdir -p "$PROFILE"
 for i in $(seq 1 60); do
@@ -20,7 +21,7 @@ exec "$BROWSER" \
   --kiosk "$URL" \
   --ozone-platform=wayland \
   --user-data-dir="$PROFILE" \
-  --disk-cache-dir=/tmp/phos-chromium-cache \
+  --disk-cache-dir=/run/phosphor2000/chromium-cache --disk-cache-size=20000000 \
   --noerrdialogs --disable-infobars --no-first-run --no-default-browser-check \
   --disable-session-crashed-bubble --disable-features=Translate,TranslateUI,MediaRouter,OptimizationHints \
   --check-for-update-interval=31536000 --disable-component-update --disable-background-networking \

@@ -44,6 +44,33 @@ def set_wifi_country(cc: str, dry_run: bool | None = None) -> bool:
         return False
 
 
+def overlay_root_active() -> bool:
+    """Root filesystem is a RAM overlay (raspi-config overlay mode, configure-robustness.sh --readonly)."""
+    try:
+        for line in Path("/proc/mounts").read_text().splitlines():
+            f = line.split()
+            if len(f) > 2 and f[1] == "/" and f[2] == "overlay":
+                return True
+    except OSError:
+        pass
+    return False
+
+
+def request_persist() -> bool:
+    """Ask the root oneshot phosphor-persist.service to copy state to the read-only lower root."""
+    argv = ["/usr/bin/systemctl", "--no-ask-password", "--no-block", "start", "phosphor-persist.service"]
+    if os.environ.get("PHOSPHOR_DRY_RUN") == "1":
+        log.warning("dry-run: would execute %s", argv)
+        return True
+    try:
+        subprocess.Popen(argv, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                         env={"PATH": "/usr/bin:/bin"})
+        return True
+    except OSError as exc:
+        log.error("persist request failed: %s", exc)
+        return False
+
+
 def run_action(what: str, dry_run: bool | None = None) -> bool:
     argv = ACTIONS.get(what)
     if argv is None:

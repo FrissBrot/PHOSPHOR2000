@@ -8,7 +8,11 @@ PartOf=phosphor.target
 StartLimitIntervalSec=0
 
 [Service]
-Type=simple
+Type=notify
+NotifyAccess=main
+# hang detection: the service must send a heartbeat (sd_notify WATCHDOG=1)
+WatchdogSec=30
+TimeoutStartSec=120
 User=phosphor
 Group=phosphor
 SupplementaryGroups=video
@@ -29,7 +33,6 @@ ProtectSystem=full
 ProtectHome=yes
 PrivateTmp=yes
 ReadWritePaths=/var/lib/phosphor2000 /run/phosphor2000
-WatchdogSec=0
 
 [Install]
 WantedBy=phosphor.target

@@ -1,0 +1,8 @@
+# Read-only root (overlay) mode: copy settings/offsets to the real SD card. Started by the core
+# (polkit allows exactly this unit) when they change.
+[Unit]
+Description=PHOSPHOR2000 persist state to SD card
+
+[Service]
+Type=oneshot
+ExecStart=/opt/phosphor2000/scripts/persist-state.sh

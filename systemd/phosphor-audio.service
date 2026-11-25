@@ -5,7 +5,11 @@ PartOf=phosphor.target
 StartLimitIntervalSec=0
 
 [Service]
-Type=simple
+Type=notify
+NotifyAccess=main
+# hang detection: the service must send a heartbeat (sd_notify WATCHDOG=1)
+WatchdogSec=20
+TimeoutStartSec=120
 User=phosphor
 Group=phosphor
 SupplementaryGroups=audio

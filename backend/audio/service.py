@@ -29,8 +29,10 @@ import numpy as np
 
 from backend.audio.analysis import AudioParams, BeatTracker
 from backend.config import AudioConfig, load_config
+from backend.services.sdnotify import notify
 
 log = logging.getLogger("phos.audio")
+STALL_S = 5.0
 SOCK = Path(os.environ.get("PHOSPHOR_RUN", "/run/phosphor2000")) / "core.sock"
 
 
@@ -60,9 +62,11 @@ class Capture:
         self.dropped = 0
         self.overflows = 0
         self.last_latency = None
+        self.last_block = time.monotonic()   # stall detection (device stops delivering)
 
     def callback(self, indata, frames, time_info, status) -> None:  # PortAudio thread
         now = time.monotonic()
+        self.last_block = now
         if status:
             self.overflows += 1
         adc_local = None
@@ -133,6 +137,7 @@ class Analyzer(threading.Thread):
         if now - self.last_status < 1.0:
             return
         self.last_status = now
+        notify("WATCHDOG=1")   # analysis thread alive; systemd restarts the service if this stops
         tr = self.tr
         self.link.send({"t": "audio_status", "state": tr.state, "live": tr.state == "LIVE",
                         "bpm": round(60 / tr.period, 3) if tr.period else None,
@@ -164,6 +169,7 @@ def run_device(cfg: AudioConfig, link: CoreLink) -> None:
         idx, name = pick_device(sd, cfg.device)
         if idx is None:
             link.send({"t": "audio_status", "state": "NO_DEVICE", "live": False})
+            notify("WATCHDOG=1")
             time.sleep(5)
             continue
         tracker = BeatTracker(params_from(cfg))
@@ -177,11 +183,15 @@ def run_device(cfg: AudioConfig, link: CoreLink) -> None:
                                 blocksize=cfg.blocksize, dtype="float32", latency="low", callback=cap.callback):
                 while an.is_alive():
                     time.sleep(1.0)
+                    if time.monotonic() - cap.last_block > STALL_S:
+                        # USB interface stopped delivering without an error: reopen the stream
+                        raise RuntimeError(f"no audio blocks for {STALL_S:.0f} s (device stalled)")
                     if cap.overflows and cap.overflows % 100 == 0:
                         log.warning("input overflows: %d", cap.overflows)
         except Exception as exc:  # device unplugged, ALSA error...
             log.error("audio stream failed: %s; retrying", exc)
             link.send({"t": "audio_status", "state": "ERROR", "live": False, "error": str(exc)[:200]})
+            notify("WATCHDOG=1")
             time.sleep(3)
         finally:
             an.stop_ev.set()
@@ -224,6 +234,7 @@ def main() -> None:
         print(sd.query_devices())
         return
     link = CoreLink()
+    notify("READY=1")
     if a.file:
         run_file(a.file, cfg, link)
         return
@@ -231,6 +242,7 @@ def main() -> None:
         log.info("audio disabled in config")
         while True:
             link.send({"t": "audio_status", "state": "DISABLED", "live": False})
+            notify("WATCHDOG=1")
             time.sleep(10)
     run_device(cfg, link)
 

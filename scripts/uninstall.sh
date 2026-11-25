@@ -12,6 +12,7 @@ HERE=$(dirname "$0")
 systemctl disable --now phosphor.target phosphor-core.service phosphor-audio.service \
   phosphor-input.service phosphor-renderer.service phosphor-firewall.service 2>/dev/null || true
 "$HERE/configure-kiosk.sh" --remove || true
+"$HERE/configure-robustness.sh" --rollback || true
 if [ -n "$(original_backup crt || true)" ]; then "$HERE/configure-crt.sh" --rollback; else "$HERE/configure-crt.sh" --remove || true; fi
 if [ -n "$(original_backup network || true)" ]; then "$HERE/configure-network.sh" --rollback; fi
 nft delete table inet phosphor 2>/dev/null || true

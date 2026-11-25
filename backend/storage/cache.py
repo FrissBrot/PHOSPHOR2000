@@ -77,17 +77,23 @@ class StateCache:
 
 
 class EventLog:
+    """Event log in RAM (journald keeps a copy), calibration history on disk.
+
+    The SD card only sees a write when a calibration is saved — continuous log writes are what
+    kills SD cards and what corrupts them on power loss.
+    """
     MAX_ROWS = 5000
 
     def __init__(self, path: Path) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
-        self.db = sqlite3.connect(str(path), check_same_thread=False, isolation_level=None)
-        self.db.execute("PRAGMA journal_mode=WAL")
-        self.db.execute("PRAGMA synchronous=NORMAL")
+        self.db = sqlite3.connect(":memory:", check_same_thread=False, isolation_level=None)
         self.db.execute("CREATE TABLE IF NOT EXISTS events (id INTEGER PRIMARY KEY, wall REAL, node TEXT,"
                         " level TEXT, msg TEXT)")
-        self.db.execute("CREATE TABLE IF NOT EXISTS calibrations (id INTEGER PRIMARY KEY, wall REAL, node TEXT,"
-                        " offset_ms REAL, detail TEXT)")
+        self.cal_db = sqlite3.connect(str(path), check_same_thread=False, isolation_level=None)
+        self.cal_db.execute("PRAGMA journal_mode=DELETE")
+        self.cal_db.execute("PRAGMA synchronous=FULL")
+        self.cal_db.execute("CREATE TABLE IF NOT EXISTS calibrations (id INTEGER PRIMARY KEY, wall REAL, node TEXT,"
+                            " offset_ms REAL, detail TEXT)")
         self.lock = threading.Lock()
         self.n = 0
 
@@ -100,7 +106,7 @@ class EventLog:
 
     def add_calibration(self, wall: float, node: str, offset_ms: float, detail: dict) -> None:
         with self.lock:
-            self.db.execute("INSERT INTO calibrations (wall, node, offset_ms, detail) VALUES (?,?,?,?)",
+            self.cal_db.execute("INSERT INTO calibrations (wall, node, offset_ms, detail) VALUES (?,?,?,?)",
                             (wall, node, offset_ms, json.dumps(detail)[:4000]))
 
     def recent(self, n: int = 200) -> list[dict]:
@@ -110,6 +116,6 @@ class EventLog:
 
     def calibrations(self, n: int = 50) -> list[dict]:
         with self.lock:
-            rows = self.db.execute("SELECT wall, node, offset_ms, detail FROM calibrations ORDER BY id DESC LIMIT ?",
+            rows = self.cal_db.execute("SELECT wall, node, offset_ms, detail FROM calibrations ORDER BY id DESC LIMIT ?",
                                    (n,)).fetchall()
         return [{"wall": r[0], "node": r[1], "offset_ms": r[2], "detail": json.loads(r[3])} for r in rows]

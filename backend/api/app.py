@@ -109,6 +109,7 @@ def create_app(core: "Core") -> FastAPI:
             entry = {"id": pid, "priority": p.priority, "state": p.state, "leader": p.leader_id,
                      "beacon_age": round(age, 1), "ip": node.peer_ips.get(pid),
                      "has_audio": p.info.get("has_audio"), "audio_live": p.info.get("audio_live"),
+                     "ver": p.info.get("ver"),
                      "online": age < 10}
             st = node.peer_status.get(pid)
             if st and now - st["_rx"] < 10:

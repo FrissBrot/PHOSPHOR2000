@@ -55,3 +55,4 @@ td.ok { color: var(--hot); } td.warn { color: var(--warn); } td.bad { color: var
   padding: 10px 14px; border-radius: 6px; color: #ffd0d0; z-index: 9; }
 .toast.ok { background: #0b1d0f; border-color: var(--hot); color: var(--fg); }
 .hidden { display: none !important; }
+.alert { border-color: var(--warn); color: var(--warn); font-weight: bold; }

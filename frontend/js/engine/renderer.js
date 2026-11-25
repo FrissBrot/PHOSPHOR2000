@@ -228,6 +228,16 @@ export class Renderer {
 
   hud(ctx, f) {
     const s = f.safe;
+    const alerts = f.st.alerts || [];
+    if (alerts.length) {
+      ctx.fillStyle = "#000";
+      ctx.fillRect(s.x - 4, s.y - 2, s.w + 8, 22);
+      ctx.fillStyle = "#ffb000";
+      ctx.font = font(16);
+      ctx.textBaseline = "top";
+      ctx.fillText("!! " + alerts[0], s.x, s.y);
+      ctx.textBaseline = "alphabetic";
+    }
     const abnormal = !["FOLLOWER", "LEADER", "DEMO"].includes(f.state);
     const show = (f.st.display && f.st.display.hud) || abnormal;
     if (!show) return;

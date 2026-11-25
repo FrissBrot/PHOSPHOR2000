@@ -103,8 +103,13 @@ function cls(ok, warn) { return ok ? "ok" : warn ? "warn" : "bad"; }
 function renderNodes() {
   const t = $("#nodes");
   t.innerHTML = "";
-  t.append(el("tr", {}, ...["node", "state", "ip", "uptime", "scene", "BPM", "src", "skew ppm", "jitter", "±unc", "audio", "fps", "Hz", "beat err ms", "cpu %", "temp", "offset", "Wi-Fi", ""].map((h) => el("th", {}, h))));
+  t.append(el("tr", {}, ...["node", "state", "ip", "uptime", "scene", "BPM", "src", "skew ppm", "jitter", "±unc", "audio", "fps", "Hz", "beat err ms", "cpu %", "temp", "offset", "Wi-Fi", "version", ""].map((h) => el("th", {}, h))));
   const ids = Object.keys(S.nodes).sort();
+  const ln = S.nodes[S.leader] || {};
+  const leaderVer = ln.version || ln.ver;
+  const alerts = ids.flatMap((id) => (S.nodes[id].alerts || []).map((a) => `${id}: ${a}`));
+  $("#alerts").textContent = alerts.join("  ·  ");
+  $("#alerts").classList.toggle("hidden", !alerts.length);
   for (const id of ids) {
     const n = S.nodes[id];
     const sy = n.sync || {}, tl = n.timeline || {}, au = n.audio || {}, rd = n.renderer || {}, me = n.metrics || {};
@@ -132,7 +137,9 @@ function renderNodes() {
       el("td", { class: rd.event_err_p95_ms > 15 ? "warn" : "", title: "render-side beat timing error: mean / p95 (excludes display latency)" },
          rd.event_err_ms == null ? "–" : `${fmt(rd.event_err_ms, 1)} / ${fmt(rd.event_err_p95_ms, 1)}`),
       el("td", {}, fmt(me.cpu_pct, 0)), el("td", {}, me.temp_c ? `${fmt(me.temp_c, 0)}°` : "–"),
-      el("td", {}, off === undefined ? "0" : fmt(off, 1)), el("td", {}, n.wifi_country || "–"), actions));
+      el("td", {}, off === undefined ? "0" : fmt(off, 1)), el("td", {}, n.wifi_country || "–"),
+      el("td", { class: n.version && leaderVer && n.version !== leaderVer ? "warn" : "", title: "software version (git commit)" },
+         (n.version || n.ver || "?") + (n.version && leaderVer && n.version !== leaderVer ? " ≠" : "")), actions));
   }
 }
 

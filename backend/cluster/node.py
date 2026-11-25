@@ -124,6 +124,8 @@ class ClusterNode:
         self.log_lines: list[dict] = []
         self.dirty = True                             # needs cache write
         self.restored_from_cache = False
+        self.version = "unknown"
+        self.duplicate: dict | None = None            # another device claims our node id
 
     # ================================================================ helpers
     def _on_transition(self, tr: Transition) -> None:
@@ -257,7 +259,8 @@ class ClusterNode:
     # =============================================================== beacons
     def _beacon(self, local: float, now_c: float) -> dict:
         b = {"t": "beacon", **self.election.beacon_fields(local)}
-        b.update({"tl_rev": self.timeline.revision, "shared_rev": self.shared_rev, "has_audio": self.has_audio,
+        b.update({"ver": self.version, "tl_rev": self.timeline.revision, "shared_rev": self.shared_rev,
+                  "has_audio": self.has_audio,
                   "audio_live": bool(self.local_audio and self.local_audio.get("live"))})
         return b
 
@@ -346,9 +349,23 @@ class ClusterNode:
             self._set_shared(replace_calibration(self.shared, offsets_ms=merged), local, "offsets merged")
 
     # =============================================================== messages
+    def alerts(self, local: float) -> list[str]:
+        out = []
+        if self.duplicate and local - self.duplicate["at"] < 60:
+            out.append(f"DUPLICATE NODE ID {self.id} ({self.duplicate.get('ip') or '?'})")
+        return out
+
     def on_message(self, m: dict, local: float, src_ip: str | None = None) -> None:
         t = m.get("t")
         sender = m.get("_from")
+        if sender == self.id:
+            # Same id, different process boot: a second device was installed with our node id.
+            first = self.duplicate is None or local - self.duplicate["at"] > 60
+            self.duplicate = {"at": local, "ip": src_ip}
+            if first:
+                self._log("error", f"DUPLICATE NODE ID: another device ({src_ip}) also calls itself {self.id}; "
+                                   "fix /etc/phosphor2000/node.yaml on one of them")
+            return
         if src_ip and sender:
             self.peer_ips[sender] = src_ip
         if t == "ping":
@@ -782,6 +799,8 @@ class ClusterNode:
             "scene": seg.scene if seg else None,
             "visual_offset_ms": self.visual_offset_ms(),
             "wifi_country": self.applied_country,
+            "version": self.version,
+            "alerts": self.alerts(local),
             "audio": {"has_device": self.has_audio, "live": bool(la.get("live")), "bpm": la.get("bpm"),
                       "confidence": la.get("confidence"), "rms": la.get("rms"), "state": la.get("state"),
                       "age": _r(local - la["_rx"]) if la else None},
@@ -823,6 +842,7 @@ class ClusterNode:
             "safety": sh.safety.model_dump(),
             "display": sh.display.model_dump(),
             "cal": cal,
+            "alerts": self.alerts(local),
         }
 
     # ================================================================== cache

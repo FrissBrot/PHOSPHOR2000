@@ -20,13 +20,15 @@
 #   --no-kiosk             do not install the Chromium kiosk
 #   --firewall             restrict ports 8080/47800 to the cluster subnet (nftables table)
 #   --disable-other-wifi   set autoconnect=no on other Wi-Fi profiles
+#   --readonly             read-only root file system (RAM overlay) — maximal power-cut safety;
+#                          hardware watchdog + write-minimised system are always configured
 # Re-running is safe (idempotent); every modified system file is backed up first.
 # shellcheck source=lib.sh
 . "$(dirname "$0")/lib.sh"
 SRC=$(cd "$(dirname "$0")/.." && pwd)
 
 NODE_ID="" PRIORITY="" COUNTRY="" SECRETS="" NORM=PAL
-DO_NET=1 DO_CRT=1 DO_KIOSK=1 FIREWALL=0 OTHERWIFI=""
+DO_NET=1 DO_CRT=1 DO_KIOSK=1 FIREWALL=0 OTHERWIFI="" READONLY=0
 GEN=""
 while [ $# -gt 0 ]; do
   case $1 in
@@ -41,6 +43,7 @@ while [ $# -gt 0 ]; do
     --no-kiosk) DO_KIOSK=0 ;;
     --firewall) FIREWALL=1 ;;
     --disable-other-wifi) OTHERWIFI=--disable-other-wifi ;;
+    --readonly) READONLY=1 ;;
     -h|--help) sed -n '2,26p' "$0"; exit 0 ;;
     *) die "unknown option $1" ;;
   esac
@@ -60,6 +63,9 @@ fi
 
 need_root
 [[ $NODE_ID =~ ^pi-0[1-9]$ ]] || die "--node-id pi-01..pi-09 required"
+if [ "$(findmnt -n -o FSTYPE / 2>/dev/null)" = overlay ]; then
+  die "root file system is read-only (overlay): run scripts/configure-robustness.sh --readonly-off, reboot, then install"
+fi
 case $(os_codename) in bookworm|trixie) ;; *) c_warn "untested OS '$(os_codename)'; continuing" ;; esac
 case $(pi_model) in *"Raspberry Pi 3"*) ;; *) c_warn "model '$(pi_model)' is not a Pi 3; timings in docs assume Pi 3" ;; esac
 
@@ -83,6 +89,9 @@ run rsync -a --delete --exclude .git --exclude .venv --exclude venv --exclude __
 [ -d "$PHOS_PREFIX/venv" ] || run python3 -m venv --system-site-packages "$PHOS_PREFIX/venv"
 run "$PHOS_PREFIX/venv/bin/pip" install --disable-pip-version-check -q -r "$PHOS_PREFIX/requirements-pi.txt"
 chmod +x "$PHOS_PREFIX"/scripts/*.sh
+# version shown per Pi in the dashboard (detects Pis running different software)
+( cd "$SRC" && git rev-parse --short HEAD 2>/dev/null || echo "unknown" ) | tr -d '\n' > "$PHOS_PREFIX/VERSION"
+( cd "$SRC" && [ -z "$(git status --porcelain 2>/dev/null)" ] || printf '+mod' ) >> "$PHOS_PREFIX/VERSION" || true
 
 c_info "4/9 node identity and secrets"
 if [ ! -f "$PHOS_ETC/node.yaml" ] || ! grep -q "id: $NODE_ID" "$PHOS_ETC/node.yaml"; then
@@ -140,7 +149,7 @@ c_info "5/9 polkit + systemd units"
 install -d -m 0755 /etc/polkit-1/rules.d
 install -m 0644 "$PHOS_PREFIX/systemd/50-phosphor.rules" /etc/polkit-1/rules.d/50-phosphor.rules
 for u in phosphor.target phosphor-core.service phosphor-audio.service phosphor-input.service \
-         phosphor-renderer.service phosphor-firewall.service phosphor-country@.service; do
+         phosphor-renderer.service phosphor-firewall.service phosphor-country@.service phosphor-persist.service; do
   install -m 0644 "$PHOS_PREFIX/systemd/$u" "/etc/systemd/system/$u"
 done
 run systemctl daemon-reload
@@ -159,6 +168,10 @@ if [ "$DO_CRT" = 1 ]; then "$PHOS_PREFIX/scripts/configure-crt.sh" --norm "$NORM
 
 c_info "8/9 kiosk"
 if [ "$DO_KIOSK" = 1 ]; then "$PHOS_PREFIX/scripts/configure-kiosk.sh"; else c_info "skipped"; fi
+
+c_info "8b/9 watchdog + power-cut protection"
+if [ "$READONLY" = 1 ]; then "$PHOS_PREFIX/scripts/configure-robustness.sh" --readonly
+else "$PHOS_PREFIX/scripts/configure-robustness.sh"; fi
 
 c_info "9/9 start"
 run systemctl restart phosphor-core.service phosphor-audio.service phosphor-input.service || true

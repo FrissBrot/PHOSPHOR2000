@@ -29,7 +29,9 @@ from backend.cluster.node import ClusterNode, CommandError
 from backend.config import ETC_DIR, STATE_DIR, AppConfig, load_config
 from backend.network.base import NetworkAdapter, NullAdapter
 from backend.storage.cache import EventLog, StateCache, boot_id
-from backend.services.system import CpuSampler, read_metrics, run_action, set_wifi_country
+from backend.services.sdnotify import notify
+from backend.services.system import CpuSampler, overlay_root_active, read_metrics, request_persist, run_action, set_wifi_country
+from backend.version import software_version
 
 log = logging.getLogger("phos.core")
 
@@ -187,10 +189,20 @@ class Core:
         self.node = ClusterNode(cfg, adapter or make_adapter(cfg), self.send, has_audio=has_audio)
         self.node.on_restart_request = self._restart
         self.node.now_fn = time.monotonic
+        self.node.version = software_version()
+        self.started = time.monotonic()
+        self.kiosk = Path("/etc/systemd/system/phosphor-renderer.service").exists() and \
+            os.environ.get("PHOSPHOR_NO_KIOSK") != "1"
+        self.renderer_seen_at = self.started        # last moment the renderer looked healthy
+        self.renderer_restarts = 0
+        self.next_renderer_restart = 0.0
+        self.overlay = overlay_root_active()
+        self.persisted_key: tuple | None = None
+        self.persist_due: float | None = None
         if cfg.network.manage and not safe_mode():
             self.node.on_wifi_country = set_wifi_country
         self.cache = StateCache(state_dir)
-        self.events = EventLog(state_dir / "events.sqlite3")
+        self.events = EventLog(state_dir / "calibrations.sqlite3")
         self.boot = boot_id()
         self.rx = self.rx_rejected = self.tx = self.tx_errors = 0
         self.metrics: dict = {}
@@ -301,12 +313,51 @@ class Core:
                                 "fallback_rx_stamps": self.udp.fallback_stamps if self.udp else 0}
             if self.node.dirty and time.monotonic() - self.cache.last_write > 10.0:
                 self.persist()
+            self.renderer_watchdog(now)
+            if self.persist_due is not None and now >= self.persist_due:
+                self.persist_due = None
+                request_persist()
+            notify("WATCHDOG=1")   # systemd restarts us if this loop ever hangs (WatchdogSec)
             await asyncio.sleep(0.05)
+
+    RENDERER_SILENT_S = 45.0       # no report from the browser for this long -> hung/crashed page
+    RENDERER_FIRST_S = 240.0       # grace after core start (Chromium cold start on a Pi 3)
+    RENDERER_FROZEN_S = 30.0       # page alive but drawing < 1 fps
+
+    def renderer_watchdog(self, now: float) -> None:
+        """Restart a hung kiosk. systemd only restarts *crashed* processes; a frozen page,
+        "Aw, Snap!" or a stalled compositor keeps the process alive. The browser reports every 2 s."""
+        if not self.kiosk or now < self.next_renderer_restart:
+            return
+        r = self.node.renderer
+        rx = r.get("_rx")
+        healthy = rx is not None and now - rx < 5 and (r.get("fps") or 0) >= 1
+        if healthy:
+            self.renderer_seen_at = now
+            return
+        limit = self.RENDERER_FIRST_S if rx is None else (
+            self.RENDERER_FROZEN_S if now - rx < 5 else self.RENDERER_SILENT_S)
+        if now - self.renderer_seen_at > limit:
+            self.renderer_restarts += 1
+            self.node._log("error", f"renderer unresponsive for {now - self.renderer_seen_at:.0f}s "
+                                    f"(restart #{self.renderer_restarts})")
+            run_action("renderer")
+            self.renderer_seen_at = now
+            self.node.renderer = {}
+            # back off if it keeps failing: 2, 4, 8 ... max 15 min between restarts
+            self.next_renderer_restart = now + min(900.0, 120.0 * 2 ** min(self.renderer_restarts - 1, 3))
 
     def persist(self) -> None:
         try:
             self.cache.save(self.node.cache_blob(self.boot, time.monotonic()))
             self.node.dirty = False
+            if self.overlay:
+                # read-only root: copy config/offsets to the real SD card when they changed
+                key = (self.node.shared_rev, json.dumps(self.node.shared.calibration.offsets_ms, sort_keys=True))
+                if key != self.persisted_key:
+                    self.persisted_key = key
+                    if self.persist_due is None:
+                        self.persist_due = time.monotonic() + 5.0   # debounce bursts of edits
         except OSError as exc:
             log.error("cache write failed: %s", exc)
 
@@ -340,6 +391,7 @@ async def amain(cfg: AppConfig) -> None:
     for sig in (signal.SIGTERM, signal.SIGINT):
         loop.add_signal_handler(sig, lambda: (core.stop(), setattr(server, "should_exit", True)))
     ticks = asyncio.create_task(core.run_ticks())
+    notify("READY=1")
     try:
         await server.serve()
     finally:
